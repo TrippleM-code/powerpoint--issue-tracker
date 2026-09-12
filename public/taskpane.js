@@ -238,27 +238,36 @@ async function readIssues() {
     await context.sync();
 
     const tracked = [];
+
     slides.items.forEach((slide, index) => {
       const issueTag = slide.tags.items.find(t => t.key === TAG_ISSUE_ID);
       if (!issueTag) return;
 
       const issue = {
-        issueId: issueTag.value, slideIndex:index+1, description:"", status:"", remark:"",
-        hasDescription:false, hasStatus:false, hasRemark:false, shapeEntries:[]
+        issueId: issueTag.value,
+        slideIndex: index + 1,
+        description: "",
+        status: "",
+        remark: "",
+        hasDescription: false,
+        hasStatus: false,
+        hasRemark: false,
+        shapeEntries: []
       };
 
       slide.shapes.items.forEach(shape => {
         const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
-        const shapeIssueTag = shape.tags.items.find(t => t.key === TAG_ISSUE_ID);
-        if (!typeTag || shapeIssueTag?.value !== issue.issueId) return;
+        if (!typeTag) return;
 
         issue.shapeEntries.push({
           proxy: shape,
           type: typeTag.value,
           storedStatus: shape.tags.items.find(t => t.key === TAG_STATUS)?.value || ""
         });
+
         shape.textFrame.textRange.load("text");
       });
+
       tracked.push(issue);
     });
 
@@ -268,10 +277,19 @@ async function readIssues() {
       issue.shapeEntries.forEach(entry => {
         const text = entry.proxy.textFrame.textRange.text || "";
         const body = text.split(/\r?\n/).slice(1).join("\n").trim();
-        if (entry.type === BOX_DESCRIPTION) { issue.description = body; issue.hasDescription = true; }
-        if (entry.type === BOX_STATUS) { issue.status = entry.storedStatus || body; issue.hasStatus = true; }
-        if (entry.type === BOX_REMARK) { issue.remark = body; issue.hasRemark = true; }
+
+        if (entry.type === BOX_DESCRIPTION) {
+          issue.description = body;
+          issue.hasDescription = true;
+        } else if (entry.type === BOX_STATUS) {
+          issue.status = entry.storedStatus || body;
+          issue.hasStatus = true;
+        } else if (entry.type === BOX_REMARK) {
+          issue.remark = body;
+          issue.hasRemark = true;
+        }
       });
+
       delete issue.shapeEntries;
     });
 
@@ -413,14 +431,33 @@ async function deleteExistingSummarySlides() {
 async function generateSummary() {
   const issues = await readIssues();
   if (!issues.length) throw new Error("No tracked issues found.");
+
   await deleteExistingSummarySlides();
 
   await PowerPoint.run(async (context) => {
-    const summarySlide = context.presentation.slides.add();
+    const slides = context.presentation.slides;
+
+    slides.load("items/id");
+    await context.sync();
+    const newSlideIndex = slides.items.length;
+
+    slides.add();
+    await context.sync();
+
+    slides.load("items/id");
+    await context.sync();
+
+    const summarySlide = slides.items[newSlideIndex];
+    if (!summarySlide) {
+      throw new Error("PowerPoint created the summary slide, but the add-in could not retrieve it.");
+    }
+
     summarySlide.tags.add(TAG_SUMMARY, "TRUE");
     summarySlide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
 
-    const title = summarySlide.shapes.addTextBox("Issue Summary", { left:30, top:20, width:650, height:36 });
+    const title = summarySlide.shapes.addTextBox("Issue Summary", {
+      left: 30, top: 20, width: 650, height: 36
+    });
     title.textFrame.textRange.font.size = 24;
     title.textFrame.textRange.font.bold = true;
 
@@ -429,22 +466,28 @@ async function generateSummary() {
       const key = cleanStatus(i.status) || "Missing";
       counts[key] = (counts[key] || 0) + 1;
     });
-    const countText = Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join("   |   ");
+
+    const countText = Object.entries(counts)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("   |   ");
+
     const overview = summarySlide.shapes.addTextBox(
       `Total: ${issues.length}   |   ${countText}`,
-      { left:30, top:60, width:650, height:30 }
+      { left: 30, top: 60, width: 650, height: 30 }
     );
     overview.textFrame.textRange.font.size = 12;
 
     const header = "ID\tDescription\tStatus\tRemark\tLocation";
     const rows = issues.map(i => {
-      const desc = (i.description || "").replace(/\s+/g, " ").slice(0,55);
-      const remark = (i.remark || "").replace(/\s+/g, " ").slice(0,45);
+      const desc = (i.description || "").replace(/\s+/g, " ").slice(0, 55);
+      const remark = (i.remark || "").replace(/\s+/g, " ").slice(0, 45);
       return `${i.issueId}\t${desc}\t${i.status || "Missing"}\t${remark}\tSlide ${i.slideIndex}`;
     });
 
-    const table = summarySlide.shapes.addTextBox([header, ...rows].join("\n"),
-      { left:30, top:105, width:660, height:380 });
+    const table = summarySlide.shapes.addTextBox(
+      [header, ...rows].join("\n"),
+      { left: 30, top: 105, width: 660, height: 380 }
+    );
     table.textFrame.wordWrap = true;
     table.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeTextToFitShape;
     table.textFrame.textRange.font.name = "Aptos";

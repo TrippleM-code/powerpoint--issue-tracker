@@ -1,19 +1,10 @@
-PowerPoint Issue Tracker V1.1 Patch
-
-Replace these files in your Vercel-hosted GitHub repo:
-- public/taskpane.html
-- public/taskpane.js
-- public/taskpane.css
+PowerPoint Issue Tracker V1.2 patch
 
 Fixes:
-- Changing Issue ID now synchronizes existing tracker box metadata.
-- New Repair Current Slide tool.
-- Safer validation.
-- Safer summary generation/deletion.
+- Validation uses one-issue-per-slide logic and no longer rejects tracker boxes due to stale shape Issue IDs.
+- Summary generation fixed: SlideCollection.add() returns void, so the code now retrieves the newly added slide after sync.
 
-After Vercel redeploys:
-1. Close and reopen the PowerPoint add-in task pane.
-2. Select an old issue slide.
-3. Click Repair Current Slide.
-4. Validate Presentation.
-5. Generate / Refresh Summary.
+Replace this file in GitHub:
+public/taskpane.js
+
+Then wait for Vercel to redeploy, close/reopen the add-in pane, and test Validate + Generate Summary.
