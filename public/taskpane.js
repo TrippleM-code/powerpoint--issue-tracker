@@ -1,3 +1,4 @@
+
 const TAG_APP = "PIT_APP";
 const TAG_ISSUE_ID = "PIT_ISSUE_ID";
 const TAG_BOX_TYPE = "PIT_BOX_TYPE";
@@ -8,9 +9,7 @@ const TAG_STATUS_LIBRARY = "PIT_STATUS_LIBRARY";
 const BOX_DESCRIPTION = "DESCRIPTION";
 const BOX_STATUS = "STATUS";
 const BOX_REMARK = "REMARK";
-
 const DEFAULT_STATUSES = ["Open", "In Progress", "Pending", "Closed"];
-
 const ui = {};
 
 Office.onReady((info) => {
@@ -20,11 +19,10 @@ Office.onReady((info) => {
 });
 
 function bindUi() {
-  [
-    "issueId","setIssueId","issueStatus","addDescription","addStatus","addRemark",
-    "statusSelect","applyStatus","statusList","newStatus","addStatusValue",
-    "validate","generateSummary","result"
-  ].forEach(id => ui[id] = document.getElementById(id));
+  ["issueId","setIssueId","issueStatus","addDescription","addStatus","addRemark",
+   "statusSelect","applyStatus","statusList","newStatus","addStatusValue",
+   "repairCurrentSlide","validate","generateSummary","result"]
+  .forEach(id => ui[id] = document.getElementById(id));
 
   ui.setIssueId.addEventListener("click", () => setIssueId().catch(showError));
   ui.addDescription.addEventListener("click", () => addBox(BOX_DESCRIPTION).catch(showError));
@@ -32,26 +30,19 @@ function bindUi() {
   ui.addRemark.addEventListener("click", () => addBox(BOX_REMARK).catch(showError));
   ui.applyStatus.addEventListener("click", () => applyStatus().catch(showError));
   ui.addStatusValue.addEventListener("click", () => addStatusValue().catch(showError));
+  ui.repairCurrentSlide.addEventListener("click", () => repairCurrentSlide().catch(showError));
   ui.validate.addEventListener("click", () => validatePresentation().catch(showError));
   ui.generateSummary.addEventListener("click", () => generateSummary().catch(showError));
 }
 
 async function initialize() {
-  if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
-    throw new Error("This PowerPoint build does not support PowerPointApi 1.4.");
-  }
   await ensureStatusLibrary();
   await loadCurrentSlideIssue();
   await refreshStatusUi();
 }
 
-function cleanIssueId(value) {
-  return String(value || "").trim().toUpperCase();
-}
-
-function cleanStatus(value) {
-  return String(value || "").trim();
-}
+function cleanIssueId(v) { return String(v || "").trim().toUpperCase(); }
+function cleanStatus(v) { return String(v || "").trim(); }
 
 async function getSelectedSlide(context) {
   const selected = context.presentation.getSelectedSlides();
@@ -61,8 +52,8 @@ async function getSelectedSlide(context) {
   return selected.items[0];
 }
 
-async function getTagValue(tagCollection, key, context) {
-  const tag = tagCollection.getItemOrNullObject(key);
+async function getTagValue(tags, key, context) {
+  const tag = tags.getItemOrNullObject(key);
   tag.load("value,isNullObject");
   await context.sync();
   return tag.isNullObject ? null : tag.value;
@@ -70,10 +61,9 @@ async function getTagValue(tagCollection, key, context) {
 
 async function ensureStatusLibrary() {
   await PowerPoint.run(async (context) => {
-    const tags = context.presentation.tags;
-    const existing = await getTagValue(tags, TAG_STATUS_LIBRARY, context);
+    const existing = await getTagValue(context.presentation.tags, TAG_STATUS_LIBRARY, context);
     if (!existing) {
-      tags.add(TAG_STATUS_LIBRARY, JSON.stringify(DEFAULT_STATUSES));
+      context.presentation.tags.add(TAG_STATUS_LIBRARY, JSON.stringify(DEFAULT_STATUSES));
       await context.sync();
     }
   });
@@ -107,7 +97,6 @@ async function loadCurrentSlideIssue() {
   });
 }
 
-
 async function setIssueId() {
   const issueId = cleanIssueId(ui.issueId.value);
   if (!issueId) throw new Error("Enter an issue ID, for example MEP-001.");
@@ -133,11 +122,22 @@ async function setIssueId() {
 
     slide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
     slide.tags.add(TAG_ISSUE_ID, issueId);
+
+    slide.shapes.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    for (const shape of slide.shapes.items) {
+      const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
+      if (!typeTag) continue;
+      shape.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
+      shape.tags.add(TAG_ISSUE_ID, issueId);
+    }
+
     await context.sync();
   });
 
   ui.issueStatus.textContent = `Current slide: ${issueId}`;
-  showResult(`Issue ID set to ${issueId}.`);
+  showResult(`Issue ID set to ${issueId}. Existing tracker boxes were synchronized.`);
 }
 
 async function requireIssueId() {
@@ -145,14 +145,14 @@ async function requireIssueId() {
     const slide = await getSelectedSlide(context);
     const issueId = await getTagValue(slide.tags, TAG_ISSUE_ID, context);
     if (!issueId) throw new Error("Set the issue ID on this slide first.");
-    return { slideId: slide.id, issueId };
+    return { issueId };
   });
 }
 
 function defaultBoxOptions(type) {
-  if (type === BOX_DESCRIPTION) return { left: 36, top: 360, width: 360, height: 100 };
-  if (type === BOX_STATUS) return { left: 420, top: 360, width: 160, height: 50 };
-  return { left: 36, top: 470, width: 544, height: 90 };
+  if (type === BOX_DESCRIPTION) return { left:36, top:360, width:360, height:100 };
+  if (type === BOX_STATUS) return { left:420, top:360, width:160, height:50 };
+  return { left:36, top:470, width:544, height:90 };
 }
 
 function initialText(type, status) {
@@ -168,23 +168,15 @@ async function addBox(type) {
 
   await PowerPoint.run(async (context) => {
     const slide = await getSelectedSlide(context);
-
-    const shapes = slide.shapes;
-    shapes.load("items/id,tags/key,tags/value");
+    slide.shapes.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
-    for (const shape of shapes.items) {
-      const boxTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
-      if (boxTag && boxTag.value === type) {
-        throw new Error(`${type} box already exists on this slide.`);
-      }
+    for (const shape of slide.shapes.items) {
+      const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
+      if (typeTag?.value === type) throw new Error(`${type} box already exists on this slide.`);
     }
 
-    const box = shapes.addGeometricShape(
-      PowerPoint.GeometricShapeType.rectangle,
-      defaultBoxOptions(type)
-    );
-
+    const box = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle, defaultBoxOptions(type));
     box.name = `PIT_${type}_${issueId}`;
     box.fill.setSolidColor("#FFFFFF");
     box.lineFormat.color = "#808080";
@@ -194,7 +186,6 @@ async function addBox(type) {
     box.textFrame.textRange.text = initialText(type, status);
     box.textFrame.textRange.font.name = "Aptos";
     box.textFrame.textRange.font.size = 12;
-
     box.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
     box.tags.add(TAG_ISSUE_ID, issueId);
     box.tags.add(TAG_BOX_TYPE, type);
@@ -203,30 +194,27 @@ async function addBox(type) {
     await context.sync();
   });
 
-  if (type === BOX_STATUS) await refreshStatusUi();
-  showResult(`${type} box added. You can now move, resize, align, and format it with PowerPoint.`);
+  showResult(`${type} box added.`);
 }
 
 async function refreshStatusUi() {
   const statuses = await getStatusLibrary();
   ui.statusSelect.innerHTML = "";
-  statuses.forEach(status => {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = status;
-    ui.statusSelect.appendChild(option);
+  statuses.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s; ui.statusSelect.appendChild(o);
   });
 
   ui.statusList.innerHTML = "";
   statuses.forEach(status => {
     const row = document.createElement("div");
     row.className = "status-item";
-    const text = document.createElement("span");
-    text.textContent = status;
-    const button = document.createElement("button");
-    button.textContent = "Remove";
-    button.addEventListener("click", () => removeStatus(status).catch(showError));
-    row.append(text, button);
+    const span = document.createElement("span");
+    span.textContent = status;
+    const btn = document.createElement("button");
+    btn.textContent = "Remove";
+    btn.addEventListener("click", () => removeStatus(status).catch(showError));
+    row.append(span, btn);
     ui.statusList.appendChild(row);
   });
 }
@@ -235,9 +223,7 @@ async function addStatusValue() {
   const value = cleanStatus(ui.newStatus.value);
   if (!value) throw new Error("Enter a status name.");
   const statuses = await getStatusLibrary();
-  if (statuses.some(s => s.toLowerCase() === value.toLowerCase())) {
-    throw new Error("That status already exists.");
-  }
+  if (statuses.some(s => s.toLowerCase() === value.toLowerCase())) throw new Error("That status already exists.");
   statuses.push(value);
   await saveStatusLibrary(statuses);
   ui.newStatus.value = "";
@@ -245,53 +231,130 @@ async function addStatusValue() {
   showResult(`Status "${value}" added.`);
 }
 
-async function countStatusUsage(status) {
+async function readIssues() {
   return PowerPoint.run(async (context) => {
     const slides = context.presentation.slides;
-    slides.load("items/shapes/items/tags/key,items/shapes/items/tags/value");
+    slides.load("items/id,items/tags/key,items/tags/value,items/shapes/items/id,items/shapes/items/tags/key,items/shapes/items/tags/value");
     await context.sync();
 
-    const matches = [];
-    slides.items.forEach((slide, slideIndex) => {
+    const tracked = [];
+    slides.items.forEach((slide, index) => {
+      const issueTag = slide.tags.items.find(t => t.key === TAG_ISSUE_ID);
+      if (!issueTag) return;
+
+      const issue = {
+        issueId: issueTag.value, slideIndex:index+1, description:"", status:"", remark:"",
+        hasDescription:false, hasStatus:false, hasRemark:false, shapeEntries:[]
+      };
+
       slide.shapes.items.forEach(shape => {
         const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
-        const statusTag = shape.tags.items.find(t => t.key === TAG_STATUS);
-        if (typeTag?.value === BOX_STATUS && statusTag?.value === status) {
-          matches.push(slideIndex + 1);
-        }
+        const shapeIssueTag = shape.tags.items.find(t => t.key === TAG_ISSUE_ID);
+        if (!typeTag || shapeIssueTag?.value !== issue.issueId) return;
+
+        issue.shapeEntries.push({
+          proxy: shape,
+          type: typeTag.value,
+          storedStatus: shape.tags.items.find(t => t.key === TAG_STATUS)?.value || ""
+        });
+        shape.textFrame.textRange.load("text");
       });
+      tracked.push(issue);
     });
-    return matches;
+
+    await context.sync();
+
+    tracked.forEach(issue => {
+      issue.shapeEntries.forEach(entry => {
+        const text = entry.proxy.textFrame.textRange.text || "";
+        const body = text.split(/\r?\n/).slice(1).join("\n").trim();
+        if (entry.type === BOX_DESCRIPTION) { issue.description = body; issue.hasDescription = true; }
+        if (entry.type === BOX_STATUS) { issue.status = entry.storedStatus || body; issue.hasStatus = true; }
+        if (entry.type === BOX_REMARK) { issue.remark = body; issue.hasRemark = true; }
+      });
+      delete issue.shapeEntries;
+    });
+
+    return tracked;
   });
 }
 
-async function removeStatus(status) {
+async function repairCurrentSlide() {
+  await PowerPoint.run(async (context) => {
+    const slide = await getSelectedSlide(context);
+    const issueId = await getTagValue(slide.tags, TAG_ISSUE_ID, context);
+    if (!issueId) throw new Error("Set the issue ID on this slide first.");
+
+    slide.shapes.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    let repaired = 0;
+    for (const shape of slide.shapes.items) {
+      const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
+      if (!typeTag) continue;
+      shape.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
+      shape.tags.add(TAG_ISSUE_ID, issueId);
+      repaired++;
+    }
+    await context.sync();
+    showResult(`Repair complete for ${issueId}. ${repaired} tracker box(es) synchronized.`);
+  });
+}
+
+async function validatePresentation() {
+  const issues = await readIssues();
   const statuses = await getStatusLibrary();
-  if (statuses.length <= 1) throw new Error("At least one status must remain.");
+  const errors = [];
+  const seen = new Map();
 
-  const usage = await countStatusUsage(status);
-  if (usage.length) {
-    const replacements = statuses.filter(s => s !== status);
-    const replacement = window.prompt(
-      `"${status}" is used on ${usage.length} slide(s): ${usage.join(", ")}.\n` +
-      `Enter replacement status:\n${replacements.join(" | ")}`,
-      replacements[0]
-    );
-    if (!replacement) return;
-    const matchedReplacement = replacements.find(s => s.toLowerCase() === replacement.trim().toLowerCase());
-    if (!matchedReplacement) throw new Error("Replacement must be one of the existing statuses.");
-    await replaceStatusEverywhere(status, matchedReplacement);
-  }
+  issues.forEach(issue => {
+    const id = cleanIssueId(issue.issueId);
+    if (seen.has(id)) errors.push(`${id}: duplicate on slides ${seen.get(id)} and ${issue.slideIndex}.`);
+    else seen.set(id, issue.slideIndex);
 
-  await saveStatusLibrary(statuses.filter(s => s !== status));
-  await refreshStatusUi();
-  showResult(`Status "${status}" removed.`);
+    if (!issue.hasDescription) errors.push(`${id}: missing Description box.`);
+    if (!issue.hasStatus) errors.push(`${id}: missing Status box.`);
+    if (!issue.hasRemark) errors.push(`${id}: missing Remark box.`);
+    if (issue.hasStatus && !statuses.includes(issue.status)) errors.push(`${id}: invalid status "${issue.status}".`);
+  });
+
+  if (!issues.length) return showResult("No tracked issues found.");
+  if (!errors.length) return showResult(`Validation passed.\n${issues.length} issue(s) checked.`);
+  showResult(`Validation found ${errors.length} problem(s):\n- ${errors.join("\n- ")}`);
+}
+
+async function applyStatus() {
+  const selectedStatus = ui.statusSelect.value;
+  const { issueId } = await requireIssueId();
+
+  await PowerPoint.run(async (context) => {
+    const slide = await getSelectedSlide(context);
+    slide.shapes.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    const statusShape = slide.shapes.items.find(shape => {
+      const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
+      return typeTag?.value === BOX_STATUS;
+    });
+    if (!statusShape) throw new Error("No Status box exists on this slide.");
+
+    statusShape.tags.add(TAG_STATUS, selectedStatus);
+    statusShape.textFrame.textRange.text = `Status\n${selectedStatus}`;
+    await context.sync();
+  });
+
+  showResult(`${issueId} status updated to ${selectedStatus}.`);
+}
+
+async function countStatusUsage(status) {
+  const issues = await readIssues();
+  return issues.filter(i => i.status === status).map(i => i.slideIndex);
 }
 
 async function replaceStatusEverywhere(oldStatus, newStatus) {
   await PowerPoint.run(async (context) => {
     const slides = context.presentation.slides;
-    slides.load("items/shapes/items/tags/key,items/shapes/items/tags/value,items/shapes/items/textFrame/textRange/text");
+    slides.load("items/shapes/items/tags/key,items/shapes/items/tags/value");
     await context.sync();
 
     for (const slide of slides.items) {
@@ -308,148 +371,41 @@ async function replaceStatusEverywhere(oldStatus, newStatus) {
   });
 }
 
-async function applyStatus() {
-  const selectedStatus = ui.statusSelect.value;
-  const { issueId } = await requireIssueId();
-
-  await PowerPoint.run(async (context) => {
-    const slide = await getSelectedSlide(context);
-    const shapes = slide.shapes;
-    shapes.load("items/id,tags/key,tags/value");
-    await context.sync();
-
-    const statusShape = shapes.items.find(shape => {
-      const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
-      return typeTag?.value === BOX_STATUS;
-    });
-    if (!statusShape) throw new Error("No Status box exists on this slide.");
-
-    statusShape.tags.add(TAG_STATUS, selectedStatus);
-    statusShape.textFrame.textRange.text = `Status\n${selectedStatus}`;
-    await context.sync();
-  });
-
-  showResult(`${issueId} status updated to ${selectedStatus}.`);
-}
-
-function extractBody(text, heading) {
-  const source = String(text || "");
-  const lines = source.split(/\r?\n/);
-  if (lines.length && lines[0].trim().toLowerCase() === heading.toLowerCase()) {
-    lines.shift();
-  }
-  return lines.join("\n").trim();
-}
-
-
-async function readIssues() {
-  return PowerPoint.run(async (context) => {
-    const slides = context.presentation.slides;
-    slides.load("items/id,items/tags/key,items/tags/value,items/shapes/items/id,items/shapes/items/tags/key,items/shapes/items/tags/value");
-    await context.sync();
-
-    const tracked = [];
-
-    slides.items.forEach((slide, index) => {
-      const issueTag = slide.tags.items.find(t => t.key === TAG_ISSUE_ID);
-      if (!issueTag) return;
-
-      const issue = {
-        issueId: issueTag.value,
-        slideIndex: index + 1,
-        slideId: slide.id,
-        description: "",
-        status: "",
-        remark: "",
-        hasDescription: false,
-        hasStatus: false,
-        hasRemark: false,
-        shapes: []
-      };
-
-      slide.shapes.items.forEach(shape => {
-        const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
-        const shapeIssueTag = shape.tags.items.find(t => t.key === TAG_ISSUE_ID);
-        if (!typeTag || shapeIssueTag?.value !== issue.issueId) return;
-
-        issue.shapes.push({
-          proxy: shape,
-          type: typeTag.value,
-          storedStatus: shape.tags.items.find(t => t.key === TAG_STATUS)?.value || ""
-        });
-
-        // Only our tagged tracker shapes are asked for text.
-        shape.textFrame.textRange.load("text");
-      });
-
-      tracked.push(issue);
-    });
-
-    await context.sync();
-
-    tracked.forEach(issue => {
-      issue.shapes.forEach(entry => {
-        const text = entry.proxy.textFrame.textRange.text || "";
-        if (entry.type === BOX_DESCRIPTION) {
-          issue.description = extractBody(text, "Description");
-          issue.hasDescription = true;
-        } else if (entry.type === BOX_STATUS) {
-          issue.status = entry.storedStatus || extractBody(text, "Status");
-          issue.hasStatus = true;
-        } else if (entry.type === BOX_REMARK) {
-          issue.remark = extractBody(text, "Remark");
-          issue.hasRemark = true;
-        }
-      });
-      delete issue.shapes;
-    });
-
-    return tracked;
-  });
-}
-
-async function validatePresentation() {
-  const issues = await readIssues();
+async function removeStatus(status) {
   const statuses = await getStatusLibrary();
-  const errors = [];
-  const seen = new Map();
+  if (statuses.length <= 1) throw new Error("At least one status must remain.");
 
-  issues.forEach(issue => {
-    const id = cleanIssueId(issue.issueId);
-    if (!id) errors.push(`Slide ${issue.slideIndex}: missing issue ID.`);
-    if (seen.has(id)) errors.push(`${id}: duplicate on slides ${seen.get(id)} and ${issue.slideIndex}.`);
-    else seen.set(id, issue.slideIndex);
-
-    if (!issue.hasDescription) errors.push(`${id}: missing Description box.`);
-    if (!issue.hasStatus) errors.push(`${id}: missing Status box.`);
-    if (!issue.hasRemark) errors.push(`${id}: missing Remark box.`);
-    if (issue.hasStatus && !statuses.includes(issue.status)) {
-      errors.push(`${id}: status "${issue.status}" is not in the status library.`);
-    }
-  });
-
-  if (!issues.length) {
-    showResult("No tracked issues found.");
-    return;
+  const usage = await countStatusUsage(status);
+  if (usage.length) {
+    const replacements = statuses.filter(s => s !== status);
+    const replacement = window.prompt(
+      `"${status}" is used on ${usage.length} slide(s): ${usage.join(", ")}.\nEnter replacement status:\n${replacements.join(" | ")}`,
+      replacements[0]
+    );
+    if (!replacement) return;
+    const matched = replacements.find(s => s.toLowerCase() === replacement.trim().toLowerCase());
+    if (!matched) throw new Error("Replacement must be one of the existing statuses.");
+    await replaceStatusEverywhere(status, matched);
   }
 
-  if (!errors.length) {
-    showResult(`Validation passed.\n${issues.length} issue(s) checked.`);
-  } else {
-    showResult(`Validation found ${errors.length} problem(s):\n- ${errors.join("\n- ")}`);
-  }
+  await saveStatusLibrary(statuses.filter(s => s !== status));
+  await refreshStatusUi();
+  showResult(`Status "${status}" removed.`);
 }
 
 async function deleteExistingSummarySlides() {
   await PowerPoint.run(async (context) => {
     const slides = context.presentation.slides;
-    slides.load("items/tags/key,items/tags/value");
+    slides.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
+    const toDelete = [];
     for (const slide of slides.items) {
       const tag = slide.tags.items.find(t => t.key === TAG_SUMMARY);
-      if (tag?.value === "TRUE") slide.delete();
+      if (tag?.value === "TRUE") toDelete.push(slide);
     }
+
+    for (const slide of toDelete) slide.delete();
     await context.sync();
   });
 }
@@ -457,54 +413,50 @@ async function deleteExistingSummarySlides() {
 async function generateSummary() {
   const issues = await readIssues();
   if (!issues.length) throw new Error("No tracked issues found.");
-
   await deleteExistingSummarySlides();
 
   await PowerPoint.run(async (context) => {
-    const presentation = context.presentation;
-    const summarySlide = presentation.slides.add();
+    const summarySlide = context.presentation.slides.add();
     summarySlide.tags.add(TAG_SUMMARY, "TRUE");
     summarySlide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
 
-    const title = summarySlide.shapes.addTextBox("Issue Summary", {
-      left: 30, top: 20, width: 650, height: 36
-    });
+    const title = summarySlide.shapes.addTextBox("Issue Summary", { left:30, top:20, width:650, height:36 });
     title.textFrame.textRange.font.size = 24;
     title.textFrame.textRange.font.bold = true;
 
     const counts = {};
-    issues.forEach(i => counts[i.status || "Missing"] = (counts[i.status || "Missing"] || 0) + 1);
+    issues.forEach(i => {
+      const key = cleanStatus(i.status) || "Missing";
+      counts[key] = (counts[key] || 0) + 1;
+    });
     const countText = Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join("   |   ");
     const overview = summarySlide.shapes.addTextBox(
       `Total: ${issues.length}   |   ${countText}`,
-      { left: 30, top: 60, width: 650, height: 30 }
+      { left:30, top:60, width:650, height:30 }
     );
     overview.textFrame.textRange.font.size = 12;
 
-    const header = "ID\tDescription\tStatus\tRemark\tSlide";
-    const rows = issues.map(i =>
-      `${i.issueId}\t${i.description.replace(/\s+/g, " ").slice(0, 55)}\t${i.status}\t${i.remark.replace(/\s+/g, " ").slice(0, 45)}\t${i.slideIndex}`
-    );
-
-    const tableText = [header, ...rows].join("\n");
-    const tableBox = summarySlide.shapes.addTextBox(tableText, {
-      left: 30, top: 105, width: 660, height: 380
+    const header = "ID\tDescription\tStatus\tRemark\tLocation";
+    const rows = issues.map(i => {
+      const desc = (i.description || "").replace(/\s+/g, " ").slice(0,55);
+      const remark = (i.remark || "").replace(/\s+/g, " ").slice(0,45);
+      return `${i.issueId}\t${desc}\t${i.status || "Missing"}\t${remark}\tSlide ${i.slideIndex}`;
     });
-    tableBox.textFrame.wordWrap = true;
-    tableBox.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeTextToFitShape;
-    tableBox.textFrame.textRange.font.name = "Aptos";
-    tableBox.textFrame.textRange.font.size = 10;
+
+    const table = summarySlide.shapes.addTextBox([header, ...rows].join("\n"),
+      { left:30, top:105, width:660, height:380 });
+    table.textFrame.wordWrap = true;
+    table.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeTextToFitShape;
+    table.textFrame.textRange.font.name = "Aptos";
+    table.textFrame.textRange.font.size = 10;
 
     await context.sync();
   });
 
-  showResult(`Summary slide generated for ${issues.length} issue(s).\nV1 uses a text register; clickable row hyperlinks and chart rendering are the next refinement.`);
+  showResult(`Summary generated for ${issues.length} issue(s).`);
 }
 
-function showResult(message) {
-  ui.result.textContent = message;
-}
-
+function showResult(message) { ui.result.textContent = message; }
 function showError(error) {
   console.error(error);
   ui.result.textContent = `Error: ${error?.message || error}`;
