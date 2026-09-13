@@ -23,6 +23,7 @@ const DEFAULT_PARTIES = ["Architect", "C&S", "MEP", "Main Contractor", "Subcontr
 
 const ui = {};
 let editingActionId = null;
+let pendingDeleteActionId = null;
 let toastTimer = null;
 
 Office.onReady((info) => {
@@ -629,7 +630,7 @@ function renderActions(actions) {
     edit.textContent = "Edit";
     edit.addEventListener("click", () => editAction(action));
     const remove = document.createElement("button");
-    remove.textContent = "Remove";
+    remove.textContent = pendingDeleteActionId === action.id ? "Remove?" : "Remove";
     remove.className = "delete";
     remove.addEventListener("click", () => deleteAction(action.id).catch(showError));
     controls.append(edit, remove);
@@ -640,6 +641,7 @@ function renderActions(actions) {
 }
 
 function editAction(action) {
+  pendingDeleteActionId = null;
   editingActionId = action.id;
   ui.actionEditorTitle.textContent = `Edit ${action.id}`;
   ui.actionParty.value = action.party;
@@ -653,7 +655,17 @@ async function deleteAction(actionId) {
   const issue = await readActionsFromSelectedSlide();
   const action = issue.actions.find(a => a.id === actionId);
   if (!action) return;
-  if (!window.confirm(`Remove ${actionId} (${action.party})?`)) return;
+
+  // Office task panes may not support blocking browser confirmation dialogs.
+  // Require a second click on Remove instead.
+  if (pendingDeleteActionId !== actionId) {
+    pendingDeleteActionId = actionId;
+    showToast(`Click Remove again to delete ${action.party}.`);
+    renderActions(issue.actions);
+    return;
+  }
+
+  pendingDeleteActionId = null;
 
   const actions = issue.actions.filter(a => a.id !== actionId);
   await PowerPoint.run(async context => {
@@ -994,13 +1006,20 @@ async function createOrRefreshIssueSheet() {
 async function readAllIssues() {
   return PowerPoint.run(async context => {
     const slides = context.presentation.slides;
-    slides.load("items/id,items/tags/key,items/tags/value");
+    slides.load("items/id,items/tags/key,items/tags/value,items/shapes/items/id,items/shapes/items/tags/key,items/shapes/items/tags/value");
     await context.sync();
 
     const issues = [];
+
     for (const slide of slides.items) {
       const issueId = slide.tags.items.find(t => t.key === TAG_ISSUE_ID)?.value || "";
       if (!issueId) continue;
+
+      let areaCode = slide.tags.items.find(t => t.key === TAG_AREA_CODE_V2)?.value || "";
+      let roomName = slide.tags.items.find(t => t.key === TAG_ROOM_NAME_V2)?.value || "";
+      let description = slide.tags.items.find(t => t.key === TAG_DESCRIPTION_V2)?.value || "";
+      const createdAt = slide.tags.items.find(t => t.key === TAG_CREATED_AT)?.value || "";
+      const updatedAt = slide.tags.items.find(t => t.key === TAG_UPDATED_AT)?.value || "";
 
       let actions = [];
       const actionJson = slide.tags.items.find(t => t.key === TAG_ACTIONS_V2)?.value || "[]";
@@ -1011,21 +1030,93 @@ async function readAllIssues() {
         actions = [];
       }
 
+      // Fallback migration: recover the visible V2 managed text if a tag is missing.
+      if (!description || !roomName) {
+        const descShape = slide.shapes.items.find(shape =>
+          shape.tags.items.some(t => t.key === TAG_MANAGED_ROLE && t.value === "DESC_TEXT")
+        );
+        const roomShape = slide.shapes.items.find(shape =>
+          shape.tags.items.some(t => t.key === TAG_MANAGED_ROLE && t.value === "ROOM_TEXT")
+        );
+
+        if (descShape) descShape.textFrame.textRange.load("text");
+        if (roomShape) roomShape.textFrame.textRange.load("text");
+        await context.sync();
+
+        if (!description && descShape) description = cleanText(descShape.textFrame.textRange.text);
+        if (!roomName && roomShape) roomName = cleanText(roomShape.textFrame.textRange.text);
+      }
+
+      // Area code is also visible in the Issue ID header in newer sheets.
+      if (!areaCode) {
+        const areaShape = slide.shapes.items.find(shape =>
+          shape.tags.items.some(t => t.key === TAG_MANAGED_ROLE && t.value === "ISSUE_AREA")
+        );
+        if (areaShape) {
+          areaShape.textFrame.textRange.load("text");
+          await context.sync();
+          areaCode = cleanText(areaShape.textFrame.textRange.text);
+        }
+      }
+
       issues.push({
         slideId: slide.id,
         issueId,
-        areaCode: slide.tags.items.find(t => t.key === TAG_AREA_CODE_V2)?.value || "",
-        roomName: slide.tags.items.find(t => t.key === TAG_ROOM_NAME_V2)?.value || "",
-        description: slide.tags.items.find(t => t.key === TAG_DESCRIPTION_V2)?.value || "",
+        areaCode,
+        roomName,
+        description,
         actions,
-        createdAt: slide.tags.items.find(t => t.key === TAG_CREATED_AT)?.value || "",
-        updatedAt: slide.tags.items.find(t => t.key === TAG_UPDATED_AT)?.value || ""
+        createdAt,
+        updatedAt
       });
     }
 
-    issues.sort((a, b) => a.issueId.localeCompare(b.issueId, undefined, { numeric: true }));
+    issues.sort((a, b) =>
+      a.issueId.localeCompare(b.issueId, undefined, { numeric: true, sensitivity: "base" })
+    );
+
     return issues;
   });
+}
+
+
+async function deleteExistingSummarySlides() {
+  await PowerPoint.run(async context => {
+    const slides = context.presentation.slides;
+    slides.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    const summarySlideIds = slides.items
+      .filter(slide => slide.tags.items.some(t => t.key === TAG_SUMMARY && t.value === "TRUE"))
+      .map(slide => slide.id);
+
+    summarySlideIds.forEach(id => slides.getItem(id).delete());
+    await context.sync();
+  });
+}
+
+async function addCleanGeneratedSlide(context, type) {
+  const slides = context.presentation.slides;
+  const count = slides.getCount();
+  slides.add();
+  await context.sync();
+
+  const slide = slides.getItemAt(count.value);
+  slide.load("id,shapes/items/id");
+  await context.sync();
+
+  // Remove placeholders inherited from the current PowerPoint layout.
+  for (const shape of slide.shapes.items) {
+    shape.delete();
+  }
+  await context.sync();
+
+  slide.tags.add(TAG_SUMMARY, "TRUE");
+  slide.tags.add(TAG_SUMMARY_TYPE, type);
+  slide.tags.add(TAG_APP, "ISSUEFLOW_V2");
+  await context.sync();
+
+  return slide;
 }
 
 function buildDashboard(slide, issues) {
