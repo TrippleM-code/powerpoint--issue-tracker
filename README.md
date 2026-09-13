@@ -1,17 +1,29 @@
-# IssueFlow V2 Alpha.6.1
+# IssueFlow V2 Alpha.6.2
 
-Hotfix for Alpha.6.
+Hotfix for Alpha.6.1.
 
 ## Fixed
-- `TAG_ACTIONS_JSON is not defined`
-- Summary/issue refresh now reads actions from the correct existing tag:
-  `PIT_ACTIONS_V2`
 
-No layout or feature changes were made.
+1. **Summary generation**
+   - Restored `deleteExistingSummarySlides()`.
+   - Restored `addCleanGeneratedSlide()`.
+   - `Generate / Refresh Summary` no longer fails with `deleteExistingSummarySlides is not defined`.
+
+2. **Area Code / Room / Description in Action Register**
+   - Reads the correct V2 slide tags.
+   - Includes migration fallback from visible managed shapes if an older issue slide is missing the tag.
+   - Existing slides can therefore populate the grouped Area / Room and Description fields.
+
+3. **Remove Action**
+   - Removed unsupported `window.confirm()`.
+   - First click shows `Remove?`.
+   - Second click deletes the action.
+
+No visual redesign was made in this hotfix.
 
 ## GitHub update
 Replace:
-- public/v2/taskpane.html
-- public/v2/taskpane.js
+- `public/v2/taskpane.html`
+- `public/v2/taskpane.js`
 
-`taskpane.css` is unchanged.
+CSS is unchanged.
