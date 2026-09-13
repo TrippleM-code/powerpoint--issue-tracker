@@ -735,18 +735,32 @@ function addRect(slide, left, top, width, height, fill, line, radius = false) {
 
 
 function addLine(slide, left, top, width, height, color = "#C9D5DE", weight = 1) {
-  // PowerPoint line options use left/top as the START point and
-  // width/height as the END-POINT coordinates, not delta dimensions.
-  // Callers in this app use delta-style width/height, so convert them here.
-  const line = slide.shapes.addLine(PowerPoint.ConnectorType.straight, {
-    left,
-    top,
-    width: left + width,
-    height: top + height
-  });
-  line.lineFormat.color = color;
-  line.lineFormat.weight = weight;
-  return line;
+  // Use a very thin rectangle as a divider instead of PowerPoint line shapes.
+  // This is more predictable across PowerPoint hosts and avoids diagonal-line geometry issues.
+  const horizontal = Math.abs(width) >= Math.abs(height);
+
+  const options = horizontal
+    ? {
+        left: Math.min(left, left + width),
+        top: top - (weight / 2),
+        width: Math.max(0.5, Math.abs(width)),
+        height: Math.max(0.5, weight)
+      }
+    : {
+        left: left - (weight / 2),
+        top: Math.min(top, top + height),
+        width: Math.max(0.5, weight),
+        height: Math.max(0.5, Math.abs(height))
+      };
+
+  const divider = slide.shapes.addGeometricShape(
+    PowerPoint.GeometricShapeType.rectangle,
+    options
+  );
+  divider.fill.setSolidColor(color);
+  divider.lineFormat.color = color;
+  divider.lineFormat.weight = 0;
+  return divider;
 }
 
 function addSectionHeader(slide, title, left, top, width, options = {}) {
@@ -815,18 +829,28 @@ async function createOrRefreshIssueSheet() {
       const logoData = partyLogos[party];
       let pictureAdded = false;
 
-      if (logoData && typeof slide.shapes.addPicture === "function") {
+      if (logoData) {
         try {
           const base64 = dataUrlToBase64(logoData);
-          const maxW = Math.max(34, logoCellWidth - 20);
-          const picW = Math.min(maxW, 82);
-          const picture = slide.shapes.addPicture(base64, {
-            left: left + (logoCellWidth - picW) / 2,
-            top: headerTop + 8,
-            width: picW,
-            height: 38
-          });
-          markManaged(picture, `HEADER_PARTY_LOGO_${index}`);
+          const maxW = Math.max(28, logoCellWidth - 20);
+          const logoW = Math.min(maxW, 78);
+          const logoH = 34;
+
+          // Use a normal rectangle with picture fill.
+          // ShapeFill.setImage is more broadly supported than the preview addPicture API.
+          const logoShape = slide.shapes.addGeometricShape(
+            PowerPoint.GeometricShapeType.rectangle,
+            {
+              left: left + (logoCellWidth - logoW) / 2,
+              top: headerTop + 7,
+              width: logoW,
+              height: logoH
+            }
+          );
+          logoShape.fill.setImage(base64);
+          logoShape.lineFormat.color = "#F5FBFE";
+          logoShape.lineFormat.weight = 0;
+          markManaged(logoShape, `HEADER_PARTY_LOGO_${index}`);
           pictureAdded = true;
         } catch (error) {
           console.warn(`Could not render logo for ${party}.`, error);
