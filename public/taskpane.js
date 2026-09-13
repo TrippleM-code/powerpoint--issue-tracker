@@ -5,6 +5,12 @@ const TAG_BOX_TYPE = "PIT_BOX_TYPE";
 const TAG_STATUS = "PIT_STATUS";
 const TAG_SUMMARY = "PIT_SUMMARY";
 const TAG_STATUS_LIBRARY = "PIT_STATUS_LIBRARY";
+const TAG_CREATED_AT = "PIT_CREATED_AT";
+const TAG_UPDATED_AT = "PIT_UPDATED_AT";
+const TAG_SNAPSHOT_HASH = "PIT_SNAPSHOT_HASH";
+const TAG_SUMMARY_TYPE = "PIT_SUMMARY_TYPE";
+const TAG_FOOTER = "PIT_FOOTER";
+const TAG_LINK_ID = "PIT_LINK_ID";
 
 const BOX_DESCRIPTION = "DESCRIPTION";
 const BOX_STATUS = "STATUS";
@@ -21,7 +27,7 @@ Office.onReady((info) => {
 function bindUi() {
   ["issueId","setIssueId","issueStatus","addDescription","addStatus","addRemark",
    "statusSelect","applyStatus","statusList","newStatus","addStatusValue",
-   "repairCurrentSlide","validate","generateSummary","result"]
+   "issueNavigator","goToIssue","repairCurrentSlide","validate","generateSummary","result"]
   .forEach(id => ui[id] = document.getElementById(id));
 
   ui.setIssueId.addEventListener("click", () => setIssueId().catch(showError));
@@ -30,6 +36,7 @@ function bindUi() {
   ui.addRemark.addEventListener("click", () => addBox(BOX_REMARK).catch(showError));
   ui.applyStatus.addEventListener("click", () => applyStatus().catch(showError));
   ui.addStatusValue.addEventListener("click", () => addStatusValue().catch(showError));
+  ui.goToIssue.addEventListener("click", () => goToIssue().catch(showError));
   ui.repairCurrentSlide.addEventListener("click", () => repairCurrentSlide().catch(showError));
   ui.validate.addEventListener("click", () => validatePresentation().catch(showError));
   ui.generateSummary.addEventListener("click", () => generateSummary().catch(showError));
@@ -39,6 +46,7 @@ async function initialize() {
   await ensureStatusLibrary();
   await loadCurrentSlideIssue();
   await refreshStatusUi();
+  await refreshIssueNavigator();
 }
 
 function cleanIssueId(v) { return String(v || "").trim().toUpperCase(); }
@@ -123,6 +131,13 @@ async function setIssueId() {
     slide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
     slide.tags.add(TAG_ISSUE_ID, issueId);
 
+    const createdTag = slide.tags.getItemOrNullObject(TAG_CREATED_AT);
+    createdTag.load("value,isNullObject");
+    await context.sync();
+    if (createdTag.isNullObject || !createdTag.value) {
+      slide.tags.add(TAG_CREATED_AT, new Date().toISOString());
+    }
+
     slide.shapes.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
@@ -138,6 +153,7 @@ async function setIssueId() {
 
   ui.issueStatus.textContent = `Current slide: ${issueId}`;
   showResult(`Issue ID set to ${issueId}. Existing tracker boxes were synchronized.`);
+  await refreshIssueNavigator();
 }
 
 async function requireIssueId() {
@@ -245,6 +261,7 @@ async function readIssues() {
 
       const issue = {
         issueId: issueTag.value,
+        slideId: slide.id,
         slideIndex: index + 1,
         description: "",
         status: "",
@@ -411,92 +428,558 @@ async function removeStatus(status) {
   showResult(`Status "${status}" removed.`);
 }
 
+
+function stableHash(text) {
+  let h = 2166136261;
+  const s = String(text || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function issueContentHash(issue) {
+  return stableHash([
+    String(issue.description || "").trim(),
+    String(issue.status || "").trim(),
+    String(issue.remark || "").trim()
+  ].join("\u001f"));
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function statusColor(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "open") return "#D64545";
+  if (s === "in progress") return "#3A78C2";
+  if (s === "pending") return "#D89A2B";
+  if (s === "closed") return "#2F8F5B";
+
+  // Deterministic fallback for user-defined statuses.
+  const palette = ["#6C5CE7", "#008C95", "#B56A2D", "#8C4A7E", "#526D82"];
+  const idx = parseInt(stableHash(s).slice(-2), 16) % palette.length;
+  return palette[idx];
+}
+
+async function refreshIssueNavigator() {
+  if (!ui.issueNavigator) return;
+  const issues = await readIssues();
+  issues.sort((a, b) => a.issueId.localeCompare(b.issueId, undefined, { numeric: true }));
+  ui.issueNavigator.innerHTML = "";
+  issues.forEach(issue => {
+    const option = document.createElement("option");
+    option.value = issue.issueId;
+    option.textContent = issue.issueId;
+    ui.issueNavigator.appendChild(option);
+  });
+}
+
+async function goToIssue() {
+  const issueId = cleanIssueId(ui.issueNavigator.value);
+  if (!issueId) throw new Error("No Issue ID is available.");
+
+  await PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    const target = slides.items.find(slide => {
+      const tag = slide.tags.items.find(t => t.key === TAG_ISSUE_ID);
+      return cleanIssueId(tag?.value) === issueId;
+    });
+
+    if (!target) throw new Error(`Could not find ${issueId}.`);
+    context.presentation.setSelectedSlides([target.id]);
+    await context.sync();
+  });
+
+  showResult(`Opened ${issueId}.`);
+}
+
+async function syncIssueTrackingMetadata(issues) {
+  const now = new Date().toISOString();
+
+  await PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    const slideById = new Map(slides.items.map(s => [s.id, s]));
+
+    for (const issue of issues) {
+      const slide = slideById.get(issue.slideId);
+      if (!slide) continue;
+
+      const createdTag = slide.tags.items.find(t => t.key === TAG_CREATED_AT);
+      const updatedTag = slide.tags.items.find(t => t.key === TAG_UPDATED_AT);
+      const snapshotTag = slide.tags.items.find(t => t.key === TAG_SNAPSHOT_HASH);
+      const currentHash = issueContentHash(issue);
+
+      if (!createdTag?.value) {
+        slide.tags.add(TAG_CREATED_AT, now);
+        issue.createdAt = now;
+      } else {
+        issue.createdAt = createdTag.value;
+      }
+
+      if (!snapshotTag?.value) {
+        // First V1.3 refresh establishes the baseline and does not count as an update.
+        slide.tags.add(TAG_SNAPSHOT_HASH, currentHash);
+        issue.updatedAt = updatedTag?.value || "";
+      } else if (snapshotTag.value !== currentHash) {
+        slide.tags.add(TAG_SNAPSHOT_HASH, currentHash);
+        slide.tags.add(TAG_UPDATED_AT, now);
+        issue.updatedAt = now;
+      } else {
+        issue.updatedAt = updatedTag?.value || "";
+      }
+    }
+
+    await context.sync();
+  });
+}
+
 async function deleteExistingSummarySlides() {
   await PowerPoint.run(async (context) => {
     const slides = context.presentation.slides;
     slides.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
-    const toDelete = [];
-    for (const slide of slides.items) {
+    const toDelete = slides.items.filter(slide => {
       const tag = slide.tags.items.find(t => t.key === TAG_SUMMARY);
-      if (tag?.value === "TRUE") toDelete.push(slide);
-    }
+      return tag?.value === "TRUE";
+    });
 
     for (const slide of toDelete) slide.delete();
     await context.sync();
   });
 }
 
-async function generateSummary() {
-  const issues = await readIssues();
-  if (!issues.length) throw new Error("No tracked issues found.");
+async function addBlankTaggedSlide(context, type) {
+  const slides = context.presentation.slides;
+  const count = slides.getCount();
+  slides.add();
+  await context.sync();
 
-  await deleteExistingSummarySlides();
+  const slide = slides.getItemAt(count.value);
+  slide.load("id");
+  slide.tags.add(TAG_SUMMARY, "TRUE");
+  slide.tags.add(TAG_SUMMARY_TYPE, type);
+  slide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
+  await context.sync();
+  return slide;
+}
 
-  await PowerPoint.run(async (context) => {
-    const slides = context.presentation.slides;
+function addText(slide, text, left, top, width, height, size, bold, color) {
+  const box = slide.shapes.addTextBox(text, { left, top, width, height });
+  box.textFrame.wordWrap = true;
+  box.textFrame.textRange.font.name = "Aptos";
+  box.textFrame.textRange.font.size = size;
+  box.textFrame.textRange.font.bold = !!bold;
+  if (color) box.textFrame.textRange.font.color = color;
+  return box;
+}
 
-    slides.load("items/id");
-    await context.sync();
-    const newSlideIndex = slides.items.length;
+function addCard(slide, left, top, width, height, label, value, accent) {
+  const card = slide.shapes.addGeometricShape(
+    PowerPoint.GeometricShapeType.roundRectangle,
+    { left, top, width, height }
+  );
+  card.fill.setSolidColor("#FFFFFF");
+  card.lineFormat.color = "#DDE3EA";
+  card.lineFormat.weight = 1;
 
-    slides.add();
-    await context.sync();
+  const strip = slide.shapes.addGeometricShape(
+    PowerPoint.GeometricShapeType.rectangle,
+    { left, top, width: 6, height }
+  );
+  strip.fill.setSolidColor(accent);
+  strip.lineFormat.color = accent;
 
-    slides.load("items/id");
-    await context.sync();
+  addText(slide, String(value), left + 18, top + 10, width - 24, 28, 21, true, "#17212B");
+  addText(slide, label, left + 18, top + 40, width - 24, 20, 10, false, "#5E6A75");
+}
 
-    const summarySlide = slides.items[newSlideIndex];
-    if (!summarySlide) {
-      throw new Error("PowerPoint created the summary slide, but the add-in could not retrieve it.");
+function createPieChartBase64(statusCounts, total) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 760;
+  canvas.height = 430;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const cx = 235;
+  const cy = 215;
+  const radius = 145;
+  const innerRadius = 88;
+  let angle = -Math.PI / 2;
+
+  const entries = Object.entries(statusCounts);
+  entries.forEach(([status, count]) => {
+    const portion = total ? count / total : 0;
+    const next = angle + portion * Math.PI * 2;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, angle, next);
+    ctx.arc(cx, cy, innerRadius, next, angle, true);
+    ctx.closePath();
+    ctx.fillStyle = statusColor(status);
+    ctx.fill();
+
+    angle = next;
+  });
+
+  ctx.fillStyle = "#17212B";
+  ctx.textAlign = "center";
+  ctx.font = "700 44px Segoe UI";
+  ctx.fillText(String(total), cx, cy + 4);
+  ctx.font = "20px Segoe UI";
+  ctx.fillStyle = "#64707C";
+  ctx.fillText("Total Issues", cx, cy + 40);
+
+  ctx.textAlign = "left";
+  let ly = 95;
+  entries.forEach(([status, count]) => {
+    ctx.fillStyle = statusColor(status);
+    ctx.fillRect(455, ly - 17, 20, 20);
+    ctx.fillStyle = "#17212B";
+    ctx.font = "600 22px Segoe UI";
+    ctx.fillText(status, 490, ly);
+    ctx.fillStyle = "#64707C";
+    ctx.font = "20px Segoe UI";
+    const pct = total ? Math.round((count / total) * 100) : 0;
+    ctx.fillText(`${count}  (${pct}%)`, 490, ly + 28);
+    ly += 76;
+  });
+
+  return canvas.toDataURL("image/png").split(",")[1];
+}
+
+function createTableCellProps(rowCount, columnCount, values) {
+  const props = Array.from({ length: rowCount }, () =>
+    Array.from({ length: columnCount }, () => ({}))
+  );
+
+  for (let c = 0; c < columnCount; c++) {
+    props[0][c] = {
+      fill: { color: "#18324A" },
+      font: { bold: true, color: "#FFFFFF", name: "Aptos", size: 10 }
+    };
+  }
+
+  for (let r = 1; r < rowCount; r++) {
+    const baseFill = r % 2 === 0 ? "#F4F7FA" : "#FFFFFF";
+    for (let c = 0; c < columnCount; c++) {
+      props[r][c] = {
+        fill: { color: baseFill },
+        font: { color: "#24313C", name: "Aptos", size: 9.5 }
+      };
     }
 
-    summarySlide.tags.add(TAG_SUMMARY, "TRUE");
-    summarySlide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
+    // Status column.
+    props[r][2] = {
+      fill: { color: statusColor(values[r][2]) },
+      font: { bold: true, color: "#FFFFFF", name: "Aptos", size: 9.5 }
+    };
+  }
 
-    const title = summarySlide.shapes.addTextBox("Issue Summary", {
-      left: 30, top: 20, width: 650, height: 36
-    });
-    title.textFrame.textRange.font.size = 24;
-    title.textFrame.textRange.font.bold = true;
+  return props;
+}
 
-    const counts = {};
-    issues.forEach(i => {
-      const key = cleanStatus(i.status) || "Missing";
-      counts[key] = (counts[key] || 0) + 1;
-    });
+async function buildDashboard(slide, issues, statusCounts) {
+  const total = issues.length;
 
-    const countText = Object.entries(counts)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("   |   ");
+  const topBand = slide.shapes.addGeometricShape(
+    PowerPoint.GeometricShapeType.rectangle,
+    { left: 0, top: 0, width: 960, height: 58 }
+  );
+  topBand.fill.setSolidColor("#13283A");
+  topBand.lineFormat.color = "#13283A";
 
-    const overview = summarySlide.shapes.addTextBox(
-      `Total: ${issues.length}   |   ${countText}`,
-      { left: 30, top: 60, width: 650, height: 30 }
+  addText(slide, "ISSUE MANAGEMENT DASHBOARD", 38, 16, 610, 28, 22, true, "#FFFFFF");
+  addText(
+    slide,
+    `Refreshed ${new Date().toLocaleString("en-GB")}`,
+    660, 20, 260, 20, 9.5, false, "#D7E1E9"
+  );
+
+  const statusOrder = ["Open", "In Progress", "Pending", "Closed"];
+  addCard(slide, 40, 82, 165, 74, "Total Issues", total, "#445B70");
+
+  let cardX = 220;
+  statusOrder.forEach(status => {
+    addCard(
+      slide,
+      cardX,
+      82,
+      165,
+      74,
+      status,
+      statusCounts[status] || 0,
+      statusColor(status)
     );
-    overview.textFrame.textRange.font.size = 12;
+    cardX += 180;
+  });
 
-    const header = "ID\tDescription\tStatus\tRemark\tLocation";
-    const rows = issues.map(i => {
-      const desc = (i.description || "").replace(/\s+/g, " ").slice(0, 55);
-      const remark = (i.remark || "").replace(/\s+/g, " ").slice(0, 45);
-      return `${i.issueId}\t${desc}\t${i.status || "Missing"}\t${remark}\tSlide ${i.slideIndex}`;
-    });
+  addText(slide, "Status Distribution", 40, 184, 400, 24, 15, true, "#17212B");
+  addText(slide, "Status Overview", 535, 184, 360, 24, 15, true, "#17212B");
 
-    const table = summarySlide.shapes.addTextBox(
-      [header, ...rows].join("\n"),
-      { left: 30, top: 105, width: 660, height: 380 }
+  // Power BI-like horizontal bars (stable shape fallback).
+  const maxCount = Math.max(1, ...Object.values(statusCounts));
+  let y = 225;
+  Object.entries(statusCounts).forEach(([status, count]) => {
+    addText(slide, status, 535, y, 125, 18, 10, false, "#35424E");
+    const bg = slide.shapes.addGeometricShape(
+      PowerPoint.GeometricShapeType.rectangle,
+      { left: 660, top: y + 2, width: 195, height: 14 }
     );
-    table.textFrame.wordWrap = true;
-    table.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeTextToFitShape;
-    table.textFrame.textRange.font.name = "Aptos";
-    table.textFrame.textRange.font.size = 10;
+    bg.fill.setSolidColor("#E8EDF2");
+    bg.lineFormat.color = "#E8EDF2";
+
+    const width = 195 * (count / maxCount);
+    const bar = slide.shapes.addGeometricShape(
+      PowerPoint.GeometricShapeType.rectangle,
+      { left: 660, top: y + 2, width: Math.max(4, width), height: 14 }
+    );
+    bar.fill.setSolidColor(statusColor(status));
+    bar.lineFormat.color = statusColor(status);
+    addText(slide, String(count), 865, y - 1, 45, 18, 10, true, "#35424E");
+    y += 38;
+  });
+
+  await slide.context.sync();
+
+  // Try a true donut image generated locally in the task pane.
+  const imageBase64 = createPieChartBase64(statusCounts, total);
+  if (imageBase64 && typeof slide.shapes.addPicture === "function") {
+    try {
+      const picture = slide.shapes.addPicture(imageBase64, {
+        left: 42,
+        top: 214,
+        width: 440,
+        height: 250
+      });
+      picture.name = "PIT_Status_Donut";
+      await slide.context.sync();
+      return;
+    } catch (e) {
+      console.warn("Donut image API unavailable; using shape fallback.", e);
+    }
+  }
+
+  // Fallback if addPicture is unavailable.
+  let fy = 228;
+  Object.entries(statusCounts).forEach(([status, count]) => {
+    const sq = slide.shapes.addGeometricShape(
+      PowerPoint.GeometricShapeType.rectangle,
+      { left: 60, top: fy, width: 16, height: 16 }
+    );
+    sq.fill.setSolidColor(statusColor(status));
+    sq.lineFormat.color = statusColor(status);
+    const pct = total ? Math.round((count / total) * 100) : 0;
+    addText(slide, `${status}: ${count} (${pct}%)`, 90, fy - 2, 300, 20, 11, false, "#35424E");
+    fy += 34;
+  });
+}
+
+async function buildRegisterSlide(slide, pageIssues, pageNumber, pageCount, targetSlideNumbers) {
+  const header = slide.shapes.addGeometricShape(
+    PowerPoint.GeometricShapeType.rectangle,
+    { left: 0, top: 0, width: 960, height: 58 }
+  );
+  header.fill.setSolidColor("#13283A");
+  header.lineFormat.color = "#13283A";
+
+  addText(slide, "ISSUE REGISTER", 38, 16, 420, 28, 22, true, "#FFFFFF");
+  addText(slide, `Page ${pageNumber} of ${pageCount}`, 765, 20, 150, 20, 10, false, "#D7E1E9");
+
+  const values = [
+    ["ID", "Description", "Status", "Remark"],
+    ...pageIssues.map(issue => [
+      "",
+      issue.description || "",
+      issue.status || "",
+      issue.remark || ""
+    ])
+  ];
+
+  const rowCount = values.length;
+  const colCount = 4;
+  const specificCellProperties = createTableCellProps(rowCount, colCount, values);
+
+  const tableTop = 92;
+  const tableLeft = 40;
+  const tableWidth = 880;
+  const rowHeight = 28;
+
+  slide.shapes.addTable(rowCount, colCount, {
+    values,
+    left: tableLeft,
+    top: tableTop,
+    width: tableWidth,
+    height: rowCount * rowHeight,
+    uniformCellProperties: {
+      font: { name: "Aptos", size: 9.5, color: "#24313C" }
+    },
+    specificCellProperties
+  });
+
+  // Overlay Issue IDs so they can be visually emphasized and linked separately.
+  // Office.js does not officially expose native internal slide targets. We try the
+  // PowerPoint action URI; the task-pane Issue Navigator is the guaranteed fallback.
+  pageIssues.forEach((issue, idx) => {
+    const y = tableTop + rowHeight * (idx + 1) + 4;
+    const idShape = addText(slide, issue.issueId, tableLeft + 7, y, 115, 18, 9.5, true, "#1769AA");
+    idShape.tags.add(TAG_LINK_ID, issue.issueId);
+
+    const slideNo = targetSlideNumbers.get(issue.slideId);
+    if (slideNo && typeof idShape.setHyperlink === "function") {
+      try {
+        idShape.setHyperlink({
+          address: `ppaction://hlinkshowjump?jump=${slideNo}`,
+          screenTip: `Open ${issue.issueId}`
+        });
+      } catch (e) {
+        console.warn(`Could not create internal link for ${issue.issueId}.`, e);
+      }
+    }
+  });
+}
+
+async function updateIssueFooters(issues) {
+  await PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items/id,items/shapes/items/id,items/shapes/items/tags/key,items/shapes/items/tags/value");
+    await context.sync();
+
+    const slideById = new Map(slides.items.map(s => [s.id, s]));
+
+    for (const issue of issues) {
+      const slide = slideById.get(issue.slideId);
+      if (!slide) continue;
+
+      const existing = slide.shapes.items.find(shape =>
+        shape.tags.items.some(t => t.key === TAG_FOOTER && t.value === "TRUE")
+      );
+
+      const created = formatDate(issue.createdAt);
+      const updated = formatDate(issue.updatedAt);
+      let footerText = `${issue.issueId}    Created: ${created}`;
+      if (updated) footerText += `    Updated: ${updated}`;
+
+      if (existing) {
+        existing.textFrame.textRange.text = footerText;
+      } else {
+        const footer = slide.shapes.addTextBox(footerText, {
+          left: 40, top: 510, width: 880, height: 18
+        });
+        footer.name = `PIT_FOOTER_${issue.issueId}`;
+        footer.textFrame.textRange.font.name = "Aptos";
+        footer.textFrame.textRange.font.size = 8.5;
+        footer.textFrame.textRange.font.color = "#65727E";
+        footer.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
+        footer.tags.add(TAG_FOOTER, "TRUE");
+      }
+    }
+
+    await context.sync();
+  });
+}
+
+async function generateSummary() {
+  if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8")) {
+    throw new Error(
+      "Professional dashboard/register generation requires PowerPointApi 1.8. " +
+      "Your current PowerPoint can still use issue boxes, but this summary feature needs a newer PowerPoint build."
+    );
+  }
+
+  let issues = await readIssues();
+  if (!issues.length) throw new Error("No tracked issues found.");
+
+  issues.sort((a, b) => a.issueId.localeCompare(b.issueId, undefined, { numeric: true }));
+
+  await syncIssueTrackingMetadata(issues);
+  await deleteExistingSummarySlides();
+
+  const rowsPerRegisterSlide = 12;
+  const pageCount = Math.max(1, Math.ceil(issues.length / rowsPerRegisterSlide));
+
+  let dashboardId = "";
+  const registerIds = [];
+
+  // Create blank generated slides first.
+  await PowerPoint.run(async (context) => {
+    const dashboard = await addBlankTaggedSlide(context, "DASHBOARD");
+    dashboardId = dashboard.id;
+
+    for (let i = 0; i < pageCount; i++) {
+      const register = await addBlankTaggedSlide(context, "REGISTER");
+      registerIds.push(register.id);
+    }
+  });
+
+  // Keep generated slides at the front. Move from last to first.
+  await PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    const generatedIds = [dashboardId, ...registerIds];
+
+    for (let i = generatedIds.length - 1; i >= 0; i--) {
+      const slide = slides.getItem(generatedIds[i]);
+      slide.moveTo(0);
+    }
+    await context.sync();
+  });
+
+  // Re-read final slide positions after summary pages are inserted/moved.
+  const targetSlideNumbers = await PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items/id,index");
+    await context.sync();
+    return new Map(slides.items.map(s => [s.id, s.index + 1]));
+  });
+
+  const statusCounts = {};
+  issues.forEach(issue => {
+    const status = cleanStatus(issue.status) || "Missing";
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  });
+
+  // Populate dashboard and registers.
+  await PowerPoint.run(async (context) => {
+    const dashboard = context.presentation.slides.getItem(dashboardId);
+    await buildDashboard(dashboard, issues, statusCounts);
+
+    for (let p = 0; p < pageCount; p++) {
+      const register = context.presentation.slides.getItem(registerIds[p]);
+      const pageIssues = issues.slice(
+        p * rowsPerRegisterSlide,
+        (p + 1) * rowsPerRegisterSlide
+      );
+      await buildRegisterSlide(register, pageIssues, p + 1, pageCount, targetSlideNumbers);
+    }
 
     await context.sync();
   });
 
-  showResult(`Summary generated for ${issues.length} issue(s).`);
+  await updateIssueFooters(issues);
+  await refreshIssueNavigator();
+
+  showResult(
+    `Summary refreshed: 1 dashboard + ${pageCount} register page(s) for ${issues.length} issue(s).`
+  );
 }
 
 function showResult(message) { ui.result.textContent = message; }
