@@ -430,7 +430,7 @@ async function goToIssue() {
       throw new Error(`Issue ID ${requestedId} was not found.`);
     }
 
-    target.select();
+    context.presentation.setSelectedSlides([target.id]);
     await context.sync();
   });
 
@@ -979,10 +979,43 @@ async function createOrRefreshIssueSheet() {
       size: 10.2, color: THEME.text
     }), "DESC_TEXT");
 
+    // Area / Room strip: 50/50 vertical split.
     markManaged(addRect(slide, roomX, bodyTop, roomW, bodyH, "#FFFFFF", THEME.grid), "ROOM_BODY");
-    const roomLabel = markManaged(addText(slide, issue.roomName || "Room / Space", roomX + 7, bodyTop + 52, bodyH - 104, 22, {
-      size: 10, bold: true, color: THEME.text
-    }), "ROOM_TEXT");
+
+    const halfH = bodyH / 2;
+    markManaged(
+      addLine(slide, roomX, bodyTop + halfH, roomW, 0, THEME.gridStrong, 1),
+      "ROOM_HALF_DIVIDER"
+    );
+
+    const areaLabel = markManaged(addText(
+      slide,
+      issue.areaCode || "Area",
+      roomX + 7,
+      bodyTop + 24,
+      halfH - 48,
+      22,
+      {
+        size: 9.5,
+        bold: true,
+        color: THEME.text
+      }
+    ), "ROOM_AREA_TEXT");
+    areaLabel.rotation = 270;
+
+    const roomLabel = markManaged(addText(
+      slide,
+      issue.roomName || "Room / Space",
+      roomX + 7,
+      bodyTop + halfH + 24,
+      halfH - 48,
+      22,
+      {
+        size: 9.5,
+        bold: true,
+        color: THEME.text
+      }
+    ), "ROOM_TEXT");
     roomLabel.rotation = 270;
 
     markManaged(addRect(slide, refX, bodyTop, refW, bodyH, "#FFFFFF", THEME.grid), "REF_BODY");
@@ -1105,7 +1138,7 @@ async function readAllIssues() {
       // Area code is also visible in the Issue ID header in newer sheets.
       if (!areaCode) {
         const areaShape = slide.shapes.items.find(shape =>
-          shape.tags.items.some(t => t.key === TAG_MANAGED_ROLE && t.value === "ISSUE_AREA")
+          shape.tags.items.some(t => t.key === TAG_MANAGED_ROLE && (t.value === "ISSUE_AREA" || t.value === "ROOM_AREA_TEXT"))
         );
         if (areaShape) {
           areaShape.textFrame.textRange.load("text");
