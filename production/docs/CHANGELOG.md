@@ -25,3 +25,8 @@
 ## Production V1 P1.1
 - fixed TypeScript build failure: restored `Party` and `StatusDefinition` domain exports
 - added production `vercel.json` with Vite + `dist` output
+
+## Production V1 P1.2
+- fixed PowerPoint `InvalidArgument` during sheet creation
+- corrected `ShapeLineFormat.transparency` from `100` to `1.0`
+- this allows rendering to continue past the location divider into Area/Room, Reference Images and Actions

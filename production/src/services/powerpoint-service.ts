@@ -82,7 +82,8 @@ function addThinRect(
   const safeH = Math.max(height, 0.6);
   const shape = slide.shapes.addGeometricShape("Rectangle", { left, top, width: safeW, height: safeH });
   shape.fill.setSolidColor(fill);
-  shape.lineFormat.transparency = 100;
+  // PowerPoint API expects transparency in the range 0.0–1.0.
+  shape.lineFormat.transparency = 1.0;
   return shape;
 }
 
