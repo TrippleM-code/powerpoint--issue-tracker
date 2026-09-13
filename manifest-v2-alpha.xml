@@ -14,7 +14,7 @@
     <Host Name="Presentation"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://dailypainkiller-powerpoint-issue-tr.vercel.app/v2/taskpane.html?v=2.0.0-alpha.5"/>
+    <SourceLocation DefaultValue="https://dailypainkiller-powerpoint-issue-tr.vercel.app/v2/taskpane.html?v=2.0.0-alpha.6"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <Requirements>
