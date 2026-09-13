@@ -1,4 +1,5 @@
 import type { Issue } from "../domain/models";
+import { computeOverallStatus } from "../domain/status";
 import { SCHEMA_VERSION, TAGS } from "../storage/tag-names";
 
 declare const PowerPoint: any;
@@ -214,19 +215,105 @@ export class PowerPointService {
         addManagedTag(border, role);
       }
 
-      // Actions placeholder for P1 so layout is recognizable without implementing action workflow yet.
+      // Actions
       const actHeader = addFilledRect(slide, actionsX, pageTop, actionsW, 32, NAVY, NAVY);
       addManagedTag(actHeader, "ACTIONS_HEADER");
-      const actHeaderText = addText(slide, "ACTIONS", actionsX + 18, pageTop + 7, actionsW - 36, 18, {
+      const actHeaderText = addText(slide, "ACTIONS", actionsX + 18, pageTop + 7, 120, 18, {
         size: 9.5, bold: true, color: WHITE
       });
       addManagedTag(actHeaderText, "ACTIONS_HEADER_TEXT");
-      const actBody = addFilledRect(slide, actionsX, bodyTop, actionsW, bodyH, WHITE, GRID);
-      addManagedTag(actBody, "ACTIONS_BODY");
-      const pending = addText(slide, "Actions will be added in Production P2.", actionsX + 18, bodyTop + 18, actionsW - 36, 26, {
-        size: 10, color: "#6A7C90"
-      });
-      addManagedTag(pending, "ACTIONS_PLACEHOLDER");
+
+      const overallStatus = computeOverallStatus(issue.actions.map((action) => action.status));
+      const overallText = addText(
+        slide,
+        `Overall: ${overallStatus}`,
+        actionsX + actionsW - 120,
+        pageTop + 7,
+        102,
+        18,
+        { size: 8.5, bold: true, color: overallStatus === "Closed" ? "#DDF4E4" : "#FFD8D8" }
+      );
+      addManagedTag(overallText, "ACTIONS_OVERALL_STATUS");
+
+      const partyW = 78;
+      const statusW = 76;
+      const requiredW = actionsW - partyW - statusW;
+
+      if (issue.actions.length === 0) {
+        const actBody = addFilledRect(slide, actionsX, bodyTop, actionsW, bodyH, WHITE, GRID);
+        addManagedTag(actBody, "ACTIONS_EMPTY_BODY");
+        const noActions = addText(
+          slide,
+          "No actions added.",
+          actionsX + 18,
+          bodyTop + 18,
+          actionsW - 36,
+          24,
+          { size: 10, color: "#6A7C90" }
+        );
+        addManagedTag(noActions, "ACTIONS_EMPTY_TEXT");
+      } else {
+        const rowH = bodyH / issue.actions.length;
+
+        issue.actions.forEach((action, index) => {
+          const rowTop = bodyTop + index * rowH;
+
+          const partyCell = addFilledRect(slide, actionsX, rowTop, partyW, rowH, WHITE, GRID);
+          addManagedTag(partyCell, `ACTION_${index}_PARTY_CELL`);
+          const partyText = addText(
+            slide, action.party,
+            actionsX + 10, rowTop + 10, partyW - 20, Math.max(24, rowH - 20),
+            { size: 9.5, bold: true, color: TEXT }
+          );
+          addManagedTag(partyText, `ACTION_${index}_PARTY_TEXT`);
+
+          const requiredCell = addFilledRect(
+            slide, actionsX + partyW, rowTop, requiredW, rowH, WHITE, GRID
+          );
+          addManagedTag(requiredCell, `ACTION_${index}_REQUIRED_CELL`);
+          const requiredText = addText(
+            slide, action.required,
+            actionsX + partyW + 12, rowTop + 10, requiredW - 24, Math.max(24, rowH - 20),
+            { size: 9.5, color: TEXT }
+          );
+          addManagedTag(requiredText, `ACTION_${index}_REQUIRED_TEXT`);
+
+          let statusFill = "#EEF1F5";
+          let statusTextColor = "#46586B";
+          switch (action.status.trim().toLowerCase()) {
+            case "open":
+              statusFill = "#FDE8E8";
+              statusTextColor = "#9F1D1D";
+              break;
+            case "in progress":
+              statusFill = "#E5F0FB";
+              statusTextColor = "#185A8B";
+              break;
+            case "pending":
+              statusFill = "#FFF2D8";
+              statusTextColor = "#8A5A00";
+              break;
+            case "closed":
+              statusFill = "#E6F5EA";
+              statusTextColor = "#27663A";
+              break;
+          }
+
+          const statusCell = addFilledRect(
+            slide, actionsX + partyW + requiredW, rowTop, statusW, rowH, statusFill, GRID
+          );
+          addManagedTag(statusCell, `ACTION_${index}_STATUS_CELL`);
+          const statusText = addText(
+            slide, action.status,
+            actionsX + partyW + requiredW + 8,
+            rowTop + 10,
+            statusW - 16,
+            Math.max(24, rowH - 20),
+            { size: 9.5, bold: true, color: statusTextColor }
+          );
+          addManagedTag(statusText, `ACTION_${index}_STATUS_TEXT`);
+        });
+      }
 
       await context.sync();
     });

@@ -30,3 +30,12 @@
 - fixed PowerPoint `InvalidArgument` during sheet creation
 - corrected `ShapeLineFormat.transparency` from `100` to `1.0`
 - this allows rendering to continue past the location divider into Area/Room, Reference Images and Actions
+
+## Production V1 P2
+- action add/edit/remove workflow
+- two-click remove confirmation
+- equal-height action rows
+- status colors
+- overall issue status derived from actions
+- issue Updated timestamp changes on action changes
+- P2 unit and acceptance tests

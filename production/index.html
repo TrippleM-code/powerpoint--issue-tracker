@@ -14,7 +14,7 @@
         <div class="eyebrow">IssueFlow</div>
         <h1>PowerPoint Issue Manager</h1>
       </div>
-      <span id="appVersion" class="version">Production V1 · P1.2</span>
+      <span id="appVersion" class="version">Production V1 · P2</span>
     </header>
 
     <section id="statusBanner" class="banner hidden" role="status" aria-live="polite"></section>
@@ -48,6 +48,33 @@
     <section class="stats-card" aria-label="Issue metadata">
       <div><span>Created</span><strong id="createdAt">—</strong></div>
       <div><span>Updated</span><strong id="updatedAt">—</strong></div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">Actions</div>
+
+      <input id="editingActionId" type="hidden" />
+
+      <label for="actionParty">Action By / Responsible Party</label>
+      <input id="actionParty" autocomplete="off" placeholder="e.g. MEP" />
+
+      <label for="actionRequired">Action Required</label>
+      <textarea id="actionRequired" rows="3" placeholder="Describe the required action"></textarea>
+
+      <label for="actionStatus">Status</label>
+      <select id="actionStatus">
+        <option>Open</option>
+        <option>In Progress</option>
+        <option>Pending</option>
+        <option>Closed</option>
+      </select>
+
+      <div class="button-row">
+        <button id="saveActionBtn" class="primary">Add Action</button>
+        <button id="cancelEditActionBtn" class="secondary hidden">Cancel Edit</button>
+      </div>
+
+      <div id="actionList" class="action-list" aria-live="polite"></div>
     </section>
   </main>
 </body>

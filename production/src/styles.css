@@ -37,3 +37,31 @@ button:disabled { opacity:.55; cursor:wait; }
 .banner.error { background:#fff0f0; border:1px solid #efc2c2; color:#8b2727; }
 .banner.info { background:#edf5fb; border:1px solid #c4dcec; color:#24516f; }
 .hidden { display:none; }
+
+select {
+  width:100%; border:1px solid #cbd7e5; border-radius:9px; padding:10px 11px;
+  font:inherit; background:#fff;
+}
+select:focus { outline:2px solid #7db7e8; outline-offset:1px; }
+.button-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+.action-list { display:grid; gap:8px; margin-top:14px; }
+.action-card {
+  border:1px solid #dbe4ef; border-radius:10px; padding:10px; background:#fbfcfe;
+}
+.action-card-head {
+  display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:6px;
+}
+.action-card-title { font-size:12px; font-weight:800; }
+.action-card-status { font-size:10px; font-weight:800; padding:3px 7px; border-radius:999px; }
+.action-card p { margin:0; font-size:12px; line-height:1.45; color:#40546a; }
+.action-card-actions { display:flex; gap:6px; margin-top:9px; }
+.action-card-actions button { flex:1; padding:7px 8px; font-size:11px; }
+.status-open { background:#fde8e8; color:#9f1d1d; }
+.status-in-progress { background:#e5f0fb; color:#185a8b; }
+.status-pending { background:#fff2d8; color:#8a5a00; }
+.status-closed { background:#e6f5ea; color:#27663a; }
+.status-custom { background:#eef1f5; color:#46586b; }
+.empty-state {
+  border:1px dashed #cbd7e5; border-radius:9px; padding:12px;
+  color:#718297; font-size:11px; text-align:center;
+}
