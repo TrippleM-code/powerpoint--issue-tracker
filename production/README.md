@@ -53,3 +53,11 @@ A Microsoft PowerPoint Office Add-in for structured issue and action management:
 8. Marketplace readiness
 
 See `docs/` for the detailed production plan.
+
+## P1.1 deployment hotfix
+
+If P1 failed on Vercel with:
+
+`TS2305: Module '../domain/models' has no exported member 'Party'`
+
+replace the Production P1 files with this P1.1 package. The missing shared domain types are restored.

@@ -21,3 +21,7 @@
 - 50/50 vertical Area/Room strip
 - P1 validation tests
 - production-development manifest template
+
+## Production V1 P1.1
+- fixed TypeScript build failure: restored `Party` and `StatusDefinition` domain exports
+- added production `vercel.json` with Vite + `dist` output

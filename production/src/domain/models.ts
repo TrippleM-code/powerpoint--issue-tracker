@@ -16,3 +16,15 @@ export interface Issue {
   updatedAt?: string;
   actions: ActionItem[];
 }
+
+
+export interface Party {
+  id: string;
+  name: string;
+  logoDataUrl?: string;
+}
+
+export interface StatusDefinition {
+  id: string;
+  name: string;
+}
