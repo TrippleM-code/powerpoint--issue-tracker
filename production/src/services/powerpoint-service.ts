@@ -146,14 +146,62 @@ export class PowerPointService {
       const bodyTop = 108;
       const bodyH = pageBottom - bodyTop;
 
+      // Keep every generated shape inside a 16:9 widescreen slide (960 x 540 pt).
+      const pageRight = 952;
+      const gap = 8;
+
       const descX = pageLeft;
-      const descW = 250;
-      const stripX = descX + descW + 10;
-      const stripW = 38;
-      const refX = stripX + stripW + 10;
-      const refW = 352;
-      const actionsX = refX + refW + 10;
-      const actionsW = 320;
+      const descW = 230;
+
+      const stripX = descX + descW + gap;
+      const stripW = 36;
+
+      const refX = stripX + stripW + gap;
+      const refW = 300;
+
+      const actionsX = refX + refW + gap;
+      const actionsW = pageRight - actionsX;
+
+      // Production P2.1 issue identity header.
+      const identityTop = 18;
+      const identityH = 42;
+      const identityX = pageRight - 300;
+      const identityW = 292;
+
+      const identityBox = addFilledRect(
+        slide, identityX, identityTop, identityW, identityH, "#F8F1F1", "#E4DADA"
+      );
+      addManagedTag(identityBox, "ISSUE_IDENTITY_BOX");
+
+      const issueLabel = addText(
+        slide, "ISSUE ID", identityX + 12, identityTop + 5, 64, 12,
+        { size: 7.5, bold: true, color: "#5F5660" }
+      );
+      addManagedTag(issueLabel, "ISSUE_ID_LABEL");
+
+      const issueValue = addText(
+        slide, issue.id, identityX + 12, identityTop + 16, 105, 20,
+        { size: 15, bold: true, color: TEXT }
+      );
+      addManagedTag(issueValue, "ISSUE_ID_VALUE");
+
+      const createdValue = addText(
+        slide,
+        `Created ${new Date(issue.createdAt).toLocaleString()}`,
+        identityX + 124, identityTop + 7, identityW - 136, 12,
+        { size: 7.2, color: TEXT }
+      );
+      addManagedTag(createdValue, "ISSUE_CREATED_VALUE");
+
+      if (issue.updatedAt) {
+        const updatedValue = addText(
+          slide,
+          `Updated ${new Date(issue.updatedAt).toLocaleString()}`,
+          identityX + 124, identityTop + 23, identityW - 136, 12,
+          { size: 7.2, color: TEXT }
+        );
+        addManagedTag(updatedValue, "ISSUE_UPDATED_VALUE");
+      }
 
       // Issue description
       const descHeader = addFilledRect(slide, descX, pageTop, descW, 32, NAVY, NAVY);
