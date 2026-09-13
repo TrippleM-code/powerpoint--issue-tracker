@@ -1,29 +1,29 @@
-# IssueFlow V2 Alpha.6.2
+# IssueFlow V2 Alpha.6.3
 
-Hotfix for Alpha.6.1.
+Navigator reliability hotfix.
 
 ## Fixed
+- Fixed `refreshIssueNavigator is not defined`.
+- Added the missing navigator refresh function.
+- Added the missing Go-to-Issue function.
+- Issue Navigator is now an editable text field with suggestions.
+- You can copy/paste an Issue ID from the register.
+- Press Enter or click Go.
+- Matching is case-insensitive.
+- Navigator refresh is included in the common UI refresh flow.
 
-1. **Summary generation**
-   - Restored `deleteExistingSummarySlides()`.
-   - Restored `addCleanGeneratedSlide()`.
-   - `Generate / Refresh Summary` no longer fails with `deleteExistingSummarySlides is not defined`.
+## Verified before packaging
+- JavaScript syntax check passed.
+- `refreshIssueNavigator()` exists exactly once.
+- `goToIssue()` exists exactly once.
+- `deleteExistingSummarySlides()` exists exactly once.
+- `addCleanGeneratedSlide()` exists exactly once.
+- No `TAG_ACTIONS_JSON`.
+- No `window.confirm`.
+- No old select-only `ui.issueNavigator` references.
 
-2. **Area Code / Room / Description in Action Register**
-   - Reads the correct V2 slide tags.
-   - Includes migration fallback from visible managed shapes if an older issue slide is missing the tag.
-   - Existing slides can therefore populate the grouped Area / Room and Description fields.
-
-3. **Remove Action**
-   - Removed unsupported `window.confirm()`.
-   - First click shows `Remove?`.
-   - Second click deletes the action.
-
-No visual redesign was made in this hotfix.
-
-## GitHub update
+## GitHub
 Replace:
-- `public/v2/taskpane.html`
-- `public/v2/taskpane.js`
-
-CSS is unchanged.
+- public/v2/taskpane.html
+- public/v2/taskpane.css
+- public/v2/taskpane.js
