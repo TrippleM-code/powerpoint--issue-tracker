@@ -862,6 +862,9 @@ async function createOrRefreshIssueSheet() {
     slide.shapes.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
+    // Delete only IssueFlow-owned shapes.
+    // Untagged/manual PowerPoint shapes (images, text, arrows, links, annotations)
+    // must survive every refresh.
     for (const shape of slide.shapes.items) {
       const managed = shape.tags.items.find(t => t.key === TAG_MANAGED && t.value === "TRUE");
       if (managed) shape.delete();
@@ -1026,7 +1029,14 @@ async function createOrRefreshIssueSheet() {
     ), "ROOM_TEXT");
     roomLabel.rotation = 270;
 
-    markManaged(addRect(slide, refX, bodyTop, refW, bodyH, "#FFFFFF", THEME.grid), "REF_BODY");
+    // Reference Images is user-owned/manual content.
+    // Do NOT create a filled body shape here because a newly-created fill would
+    // sit above manually pasted images/text after refresh.
+    // Only draw a thin border around the manual area.
+    markManaged(addLine(slide, refX, bodyTop, refW, 0, THEME.grid, 1), "REF_TOP");
+    markManaged(addLine(slide, refX, bodyBottom, refW, 0, THEME.grid, 1), "REF_BOTTOM");
+    markManaged(addLine(slide, refX, bodyTop, 0, bodyH, THEME.grid, 1), "REF_LEFT");
+    markManaged(addLine(slide, refX + refW, bodyTop, 0, bodyH, THEME.grid, 1), "REF_RIGHT");
 
     const colHeadH = 30;
     const rowsTop = bodyTop + colHeadH;
@@ -1096,7 +1106,7 @@ async function createOrRefreshIssueSheet() {
     await context.sync();
   });
 
-  showToast("Issue sheet refreshed. Manual reference images were preserved.");
+  showToast("Issue sheet refreshed. Manual reference images and annotations were preserved.");
 }
 
 async function readAllIssues() {
