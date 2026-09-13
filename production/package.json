@@ -1,0 +1,19 @@
+{
+  "name": "issueflow-powerpoint",
+  "private": true,
+  "version": "1.0.0-dev",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0",
+    "eslint": "^9.0.0"
+  }
+}
