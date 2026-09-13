@@ -1003,7 +1003,7 @@ async function readAllIssues() {
       if (!issueId) continue;
 
       let actions = [];
-      const actionJson = slide.tags.items.find(t => t.key === TAG_ACTIONS_JSON)?.value || "[]";
+      const actionJson = slide.tags.items.find(t => t.key === TAG_ACTIONS_V2)?.value || "[]";
       try {
         const parsed = JSON.parse(actionJson);
         if (Array.isArray(parsed)) actions = parsed;
