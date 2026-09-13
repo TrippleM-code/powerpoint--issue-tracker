@@ -556,7 +556,7 @@ async function saveAction() {
     const index = actions.findIndex(a => a.id === editingActionId);
     if (index < 0) throw new Error("The action being edited no longer exists.");
     actions[index] = {
-      ...actions[index], party, action: actionText, status, remark, updatedAt: timestamp
+      ...actions[index], party, action: actionText, status, updatedAt: timestamp
     };
   } else {
     actions.push({
@@ -564,7 +564,7 @@ async function saveAction() {
       party,
       action: actionText,
       status,
-      remark,
+
       createdAt: timestamp,
       updatedAt: ""
     });
@@ -613,8 +613,6 @@ function renderActions(actions) {
     actionText.className = "action-text";
     actionText.textContent = action.action;
 
-    const remark = document.createElement("div");
-    remark.className = "action-remark";
 
     const controls = document.createElement("div");
     controls.className = "action-controls";
@@ -627,7 +625,7 @@ function renderActions(actions) {
     remove.addEventListener("click", () => deleteAction(action.id).catch(showError));
     controls.append(edit, remove);
 
-    card.append(top, actionText, remark, controls);
+    card.append(top, actionText, controls);
     ui.actionList.appendChild(card);
   });
 }
@@ -737,11 +735,14 @@ function addRect(slide, left, top, width, height, fill, line, radius = false) {
 
 
 function addLine(slide, left, top, width, height, color = "#C9D5DE", weight = 1) {
+  // PowerPoint line options use left/top as the START point and
+  // width/height as the END-POINT coordinates, not delta dimensions.
+  // Callers in this app use delta-style width/height, so convert them here.
   const line = slide.shapes.addLine(PowerPoint.ConnectorType.straight, {
     left,
     top,
-    width,
-    height
+    width: left + width,
+    height: top + height
   });
   line.lineFormat.color = color;
   line.lineFormat.weight = weight;
@@ -960,7 +961,7 @@ async function createOrRefreshIssueSheet() {
     // --------------------------------------------------------
     // ACTIONS: exactly N rows for N actions.
     // Action By | Action Required | Status.
-    // No Remark, no rounded cards, no unused rows.
+    // No legacy extra field, no rounded cards, no unused rows.
     // --------------------------------------------------------
     const tableTop = contentTop;
     const tableBottom = mainBottom;
