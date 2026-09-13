@@ -101,3 +101,20 @@ input:focus, textarea:focus, select:focus { border-color: #7bb0d2; box-shadow: 0
   .button-grid, .two-col { grid-template-columns: 1fr; }
   .tabs { gap: 2px; padding-left: 6px; padding-right: 6px; }
 }
+
+.party-logo-list .library-item { align-items:center; }
+.party-main { display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
+.party-logo-preview {
+  width:34px; height:34px; object-fit:contain; background:#fff;
+  border:1px solid #dce5eb; border-radius:6px; flex:0 0 auto;
+}
+.party-logo-placeholder {
+  width:34px; height:34px; display:grid; place-items:center;
+  background:#f6f8fa; border:1px dashed #c6d1d9; border-radius:6px;
+  color:#82909b; font-size:8px; flex:0 0 auto;
+}
+.party-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.party-actions { display:flex; gap:4px; flex:0 0 auto; }
+.party-actions button {
+  min-height:28px; padding:4px 6px; font-size:9px;
+}

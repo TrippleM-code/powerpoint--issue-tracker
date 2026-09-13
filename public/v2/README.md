@@ -1,63 +1,57 @@
-# IssueFlow V2 Alpha
+# IssueFlow V2 Alpha.3
 
-This is a **side-by-side alpha**. It does not require replacing the stable V1.4.1 files.
+This is a test build that runs side-by-side with V1.4.1.
 
-## What V2 adds
+## New in Alpha.3
 
-- Modern tabbed task-pane UI: Issue / Actions / Summary / Settings.
-- Branding footer: **Brought to you by Daily Painkiller + Codex**.
-- `Set ID -> Create / Refresh Sheet` workflow.
-- Structured Issue data: Issue ID, Description, Created, Updated.
-- Multiple structured actions per issue:
-  - Responsible Party
+- Added **Area Code**.
+- Added **Room / Space** name.
+- Room / Space is shown vertically on the generated issue sheet.
+- Created date now includes time.
+- Updated date includes time and is shown only after a meaningful change.
+- Removed Remark from actions.
+- Action structure is now:
+  - Action By
   - Action Required
   - Status
-  - Optional Remark
-- Managed Party and Status libraries.
-- Automatic overall issue status derived from its actions.
-- Manual Reference / Images area: the add-in never manages user images or annotations.
-- Summary Dashboard.
-- Grouped Action Register where the same Issue ID and Description are visually merged across its action rows.
-- Generated summary pages are rebuilt as clean pages and moved to the front.
-- Existing V1 Issue ID and Description can be reused; V2 will try to migrate a legacy Description box when no V2 description has been saved.
+- Action rows divide the available action height equally:
+  - 3 actions = 3 equal rows.
+  - 6 actions = 6 equal rows.
+- No unused action rows are generated.
+- Reference Images stays manual and has no “manual area” text.
+- Cleaner modern layout with fewer borders.
+- Section boundaries use line shapes instead of rounded card outlines.
+- Removed Daily Painkiller + Codex branding from generated PowerPoint pages.
+  Branding remains in the add-in UI.
+- Party logo manager added under Settings.
+- All parties in the party library get an equal header cell.
+- Issue ID and Created/Updated Date-Time sit immediately after the logo area.
+- Summary register removes Remark and groups Area/Room with the issue.
 
-## Safe test installation
+## GitHub
 
-Keep V1.4.1 as your working stable version.
+Upload these files directly to:
 
-Upload this folder to GitHub:
+`public/v2/`
 
-```text
-public/
-  v2/
-    taskpane.html
-    taskpane.css
-    taskpane.js
-```
+- taskpane.html
+- taskpane.css
+- taskpane.js
 
-Do **not** replace the existing root `public/taskpane.*` files yet.
+Do not create another nested `public/v2` folder.
 
-Then add `manifest-v2-alpha.xml` to your trusted add-in catalog. It has a different add-in ID and points to:
+## Test sequence
 
-```text
-https://dailypainkiller-powerpoint-issue-tr.vercel.app/v2/taskpane.html
-```
-
-You should then see a second add-in named **IssueFlow V2 Alpha** while your stable V1.4.1 stays available.
-
-## First test
-
-1. Open a test presentation and a normal issue slide.
-2. Open **IssueFlow V2 Alpha**.
-3. Set `MEP-001`.
-4. Enter a Description.
-5. Click **Create / Refresh Sheet**.
-6. Paste images manually into the Reference / Images area.
-7. Add 2-3 actions under the Actions tab.
-8. Refresh the Issue Sheet and confirm the manual images remain.
-9. Generate the Summary.
-10. Confirm the Action Register shows one merged Issue ID / Description with separate Party / Action / Remark / Status rows.
-
-## Important Alpha limitation
-
-Structured data should be edited through the task pane. Manually changing add-in-generated Description or Action text on the slide is presentation-only and can be overwritten on the next refresh. Manual reference images/annotations are intentionally preserved.
+1. Add parties in Settings.
+2. Upload a logo for each party if available.
+3. Set Issue ID.
+4. Enter Area Code, e.g. `L1-Z03`.
+5. Enter Room / Space, e.g. `Basement-1`.
+6. Enter Description.
+7. Add 3 actions and refresh the sheet.
+   Confirm the action section is divided into 3 equal rows.
+8. Add 3 more actions and refresh.
+   Confirm it becomes 6 equal rows.
+9. Paste reference images manually and refresh again.
+   Confirm the manual images remain.
+10. Generate Summary and confirm there is no Remark column.

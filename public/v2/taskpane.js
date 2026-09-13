@@ -3,8 +3,11 @@ const TAG_ISSUE_ID = "PIT_ISSUE_ID";
 const TAG_CREATED_AT = "PIT_CREATED_AT";
 const TAG_UPDATED_AT = "PIT_UPDATED_AT";
 const TAG_DESCRIPTION_V2 = "PIT_DESCRIPTION_V2";
+const TAG_AREA_CODE_V2 = "PIT_AREA_CODE_V2";
+const TAG_ROOM_NAME_V2 = "PIT_ROOM_NAME_V2";
 const TAG_ACTIONS_V2 = "PIT_ACTIONS_V2";
 const TAG_PARTY_LIBRARY = "PIT_PARTY_LIBRARY";
+const TAG_PARTY_LOGOS = "PIT_PARTY_LOGOS";
 const TAG_STATUS_LIBRARY = "PIT_STATUS_LIBRARY";
 const TAG_MANAGED = "PIT_MANAGED";
 const TAG_MANAGED_ROLE = "PIT_MANAGED_ROLE";
@@ -30,13 +33,13 @@ Office.onReady((info) => {
 
 function bindUi() {
   [
-    "issueId","setIssueId","issueDescription","saveIssue","createIssueSheet",
+    "issueId","setIssueId","areaCode","roomName","issueDescription","saveIssue","createIssueSheet",
     "currentIssueHeading","overallStatusChip","issueActionCount","issueCreatedDate","issueUpdatedDate",
     "issueNavigator","goToIssue",
-    "actionParty","actionText","actionStatus","actionRemark","saveAction","clearActionForm",
+    "actionParty","actionText","actionStatus","saveAction","clearActionForm",
     "actionEditorTitle","actionList","actionsCountBadge","actionsEmpty",
     "generateSummary","previewIssues","previewActions","previewOpen","previewClosed",
-    "partyList","newParty","addParty","statusList","newStatus","addStatus","validatePresentation","toast"
+    "partyList","newParty","addParty","partyLogoFile","statusList","newStatus","addStatus","validatePresentation","toast"
   ].forEach(id => ui[id] = document.getElementById(id));
 
   document.querySelectorAll(".tab").forEach(tab => {
@@ -53,6 +56,7 @@ function bindUi() {
 
   ui.generateSummary.addEventListener("click", () => generateSummary().catch(showError));
   ui.addParty.addEventListener("click", () => addParty().catch(showError));
+  ui.partyLogoFile.addEventListener("change", () => handlePartyLogoSelected().catch(showError));
   ui.addStatus.addEventListener("click", () => addStatusValue().catch(showError));
   ui.validatePresentation.addEventListener("click", () => validatePresentation().catch(showError));
 }
@@ -82,7 +86,17 @@ function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const datePart = date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+  const timePart = date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  return `${datePart} ${timePart}`;
 }
 
 function nowIso() {
@@ -171,13 +185,116 @@ async function getParties() {
   return readJsonPresentationTag(TAG_PARTY_LIBRARY, DEFAULT_PARTIES);
 }
 
+
+async function getPartyLogos() {
+  return PowerPoint.run(async context => {
+    const value = await getTagValue(context.presentation.tags, TAG_PARTY_LOGOS, context);
+    try {
+      const parsed = JSON.parse(value || "{}");
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+}
+
+async function savePartyLogos(logos) {
+  await PowerPoint.run(async context => {
+    context.presentation.tags.add(TAG_PARTY_LOGOS, JSON.stringify(logos || {}));
+    await context.sync();
+  });
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the logo file."));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadBrowserImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error("Could not open the selected logo image."));
+    image.onload = () => resolve(image);
+    image.src = dataUrl;
+  });
+}
+
+async function optimizeLogo(file) {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    throw new Error("Use PNG, JPG or WebP for logos.");
+  }
+
+  const sourceUrl = await fileToDataUrl(file);
+  const image = await loadBrowserImage(sourceUrl);
+  const scale = Math.min(1, 320 / image.width, 120 / image.height);
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Image processing is unavailable.");
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+
+  let dataUrl = canvas.toDataURL("image/png");
+  if (dataUrl.length > 180000) dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+  if (dataUrl.length > 220000) {
+    throw new Error("Logo is too large after optimization. Please use a simpler or smaller image.");
+  }
+  return dataUrl;
+}
+
+function dataUrlToBase64(dataUrl) {
+  const index = String(dataUrl || "").indexOf(",");
+  return index >= 0 ? dataUrl.slice(index + 1) : "";
+}
+
+let pendingLogoParty = null;
+
+async function choosePartyLogo(party) {
+  pendingLogoParty = party;
+  ui.partyLogoFile.value = "";
+  ui.partyLogoFile.click();
+}
+
+async function handlePartyLogoSelected() {
+  const file = ui.partyLogoFile.files?.[0];
+  const party = pendingLogoParty;
+  pendingLogoParty = null;
+  if (!file || !party) return;
+
+  const optimized = await optimizeLogo(file);
+  const logos = await getPartyLogos();
+  logos[party] = optimized;
+  await savePartyLogos(logos);
+  await refreshLibrariesUi();
+  showToast(`Logo saved for ${party}.`);
+}
+
+async function removePartyLogo(party) {
+  const logos = await getPartyLogos();
+  if (!logos[party]) return;
+  delete logos[party];
+  await savePartyLogos(logos);
+  await refreshLibrariesUi();
+  showToast(`Logo removed for ${party}.`);
+}
+
+
 async function refreshLibrariesUi() {
-  const [parties, statuses] = await Promise.all([getParties(), getStatuses()]);
+  const [parties, statuses, logos] = await Promise.all([getParties(), getStatuses(), getPartyLogos()]);
 
   populateSelect(ui.actionParty, parties);
   populateSelect(ui.actionStatus, statuses);
 
-  renderLibraryList(ui.partyList, parties, value => removeParty(value));
+  renderPartyLibraryList(ui.partyList, parties, logos);
   renderLibraryList(ui.statusList, statuses, value => removeStatus(value));
 }
 
@@ -191,6 +308,60 @@ function populateSelect(select, values) {
     select.appendChild(option);
   });
   if (values.includes(previous)) select.value = previous;
+}
+
+
+function renderPartyLibraryList(container, parties, logos) {
+  container.innerHTML = "";
+
+  parties.forEach(party => {
+    const row = document.createElement("div");
+    row.className = "library-item";
+
+    const main = document.createElement("div");
+    main.className = "party-main";
+
+    if (logos[party]) {
+      const img = document.createElement("img");
+      img.className = "party-logo-preview";
+      img.src = logos[party];
+      img.alt = `${party} logo`;
+      main.appendChild(img);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "party-logo-placeholder";
+      placeholder.textContent = "LOGO";
+      main.appendChild(placeholder);
+    }
+
+    const name = document.createElement("span");
+    name.className = "party-name";
+    name.textContent = party;
+    main.appendChild(name);
+
+    const actions = document.createElement("div");
+    actions.className = "party-actions";
+
+    const upload = document.createElement("button");
+    upload.textContent = logos[party] ? "Replace" : "Upload";
+    upload.addEventListener("click", () => choosePartyLogo(party).catch(showError));
+    actions.appendChild(upload);
+
+    if (logos[party]) {
+      const removeLogo = document.createElement("button");
+      removeLogo.textContent = "Logo ×";
+      removeLogo.addEventListener("click", () => removePartyLogo(party).catch(showError));
+      actions.appendChild(removeLogo);
+    }
+
+    const remove = document.createElement("button");
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => removeParty(party).catch(showError));
+    actions.appendChild(remove);
+
+    row.append(main, actions);
+    container.appendChild(row);
+  });
 }
 
 function renderLibraryList(container, values, removeHandler) {
@@ -213,6 +384,8 @@ async function loadCurrentIssueSafe() {
     await loadCurrentIssue();
   } catch (error) {
     ui.issueId.value = "";
+    ui.areaCode.value = "";
+    ui.roomName.value = "";
     ui.issueDescription.value = "";
     updateCurrentIssueUi(null);
     renderActions([]);
@@ -222,6 +395,8 @@ async function loadCurrentIssueSafe() {
 async function loadCurrentIssue() {
   const issue = await readSelectedIssue();
   ui.issueId.value = issue.issueId || "";
+  ui.areaCode.value = issue.areaCode || "";
+  ui.roomName.value = issue.roomName || "";
   ui.issueDescription.value = issue.description || "";
   updateCurrentIssueUi(issue);
   renderActions(issue.actions);
@@ -232,6 +407,8 @@ async function readSelectedIssue() {
     const slide = await getSelectedSlide(context);
     const issueId = await getTagValue(slide.tags, TAG_ISSUE_ID, context);
     const descriptionTag = await getTagValue(slide.tags, TAG_DESCRIPTION_V2, context);
+    const areaCode = await getTagValue(slide.tags, TAG_AREA_CODE_V2, context);
+    const roomName = await getTagValue(slide.tags, TAG_ROOM_NAME_V2, context);
     const actionsTag = await getTagValue(slide.tags, TAG_ACTIONS_V2, context);
     const createdAt = await getTagValue(slide.tags, TAG_CREATED_AT, context);
     const updatedAt = await getTagValue(slide.tags, TAG_UPDATED_AT, context);
@@ -260,6 +437,8 @@ async function readSelectedIssue() {
     return {
       slideId: slide.id,
       issueId: issueId || "",
+      areaCode: areaCode || "",
+      roomName: roomName || "",
       description,
       actions,
       createdAt: createdAt || "",
@@ -316,13 +495,27 @@ async function setIssueId() {
 async function saveIssueData({ quiet = false } = {}) {
   const issueId = cleanIssueId(ui.issueId.value);
   if (!issueId) throw new Error("Set an Issue ID first.");
+  const areaCode = cleanText(ui.areaCode.value).toUpperCase();
+  const roomName = cleanText(ui.roomName.value);
   const description = cleanText(ui.issueDescription.value);
 
   await PowerPoint.run(async context => {
     const slide = await getSelectedSlide(context);
     const currentDescription = await getTagValue(slide.tags, TAG_DESCRIPTION_V2, context) || "";
+    const currentAreaCode = await getTagValue(slide.tags, TAG_AREA_CODE_V2, context) || "";
+    const currentRoomName = await getTagValue(slide.tags, TAG_ROOM_NAME_V2, context) || "";
+
+    slide.tags.add(TAG_AREA_CODE_V2, areaCode);
+    slide.tags.add(TAG_ROOM_NAME_V2, roomName);
     slide.tags.add(TAG_DESCRIPTION_V2, description);
-    if (currentDescription !== description) slide.tags.add(TAG_UPDATED_AT, nowIso());
+
+    if (
+      currentDescription !== description ||
+      currentAreaCode !== areaCode ||
+      currentRoomName !== roomName
+    ) {
+      slide.tags.add(TAG_UPDATED_AT, nowIso());
+    }
     await context.sync();
   });
 
@@ -350,7 +543,6 @@ async function saveAction() {
   const party = cleanText(ui.actionParty.value);
   const actionText = cleanText(ui.actionText.value);
   const status = cleanText(ui.actionStatus.value);
-  const remark = cleanText(ui.actionRemark.value);
 
   if (!party) throw new Error("Choose a responsible party.");
   if (!actionText) throw new Error("Enter the required action.");
@@ -396,7 +588,6 @@ function clearActionForm() {
   ui.actionEditorTitle.textContent = "Add action";
   ui.saveAction.textContent = "+ Add Action";
   ui.actionText.value = "";
-  ui.actionRemark.value = "";
 }
 
 function renderActions(actions) {
@@ -424,7 +615,6 @@ function renderActions(actions) {
 
     const remark = document.createElement("div");
     remark.className = "action-remark";
-    remark.textContent = action.remark ? `Remark: ${action.remark}` : "No remark";
 
     const controls = document.createElement("div");
     controls.className = "action-controls";
@@ -448,7 +638,6 @@ function editAction(action) {
   ui.actionParty.value = action.party;
   ui.actionText.value = action.action;
   ui.actionStatus.value = action.status;
-  ui.actionRemark.value = action.remark || "";
   ui.saveAction.textContent = "Save Changes";
   activateTab("actions");
 }
@@ -546,87 +735,311 @@ function addRect(slide, left, top, width, height, fill, line, radius = false) {
   return rect;
 }
 
+
+function addLine(slide, left, top, width, height, color = "#C9D5DE", weight = 1) {
+  const line = slide.shapes.addLine(PowerPoint.ConnectorType.straight, {
+    left,
+    top,
+    width,
+    height
+  });
+  line.lineFormat.color = color;
+  line.lineFormat.weight = weight;
+  return line;
+}
+
+function addSectionHeader(slide, title, left, top, width, options = {}) {
+  const color = options.color || "#19364F";
+  const lineColor = options.lineColor || "#8FB6CE";
+  markManaged(addText(slide, title, left, top, width, 20, {
+    size: options.size || 10,
+    bold: true,
+    color
+  }), `${options.role || title}_TITLE`);
+  markManaged(addLine(slide, left, top + 24, width, 0, lineColor, 1.4), `${options.role || title}_LINE`);
+}
+
 async function createOrRefreshIssueSheet() {
   await saveIssueData({ quiet: true });
   const issue = await readSelectedIssue();
   if (!issue.issueId) throw new Error("Set an Issue ID first.");
+
+  const [parties, partyLogos] = await Promise.all([getParties(), getPartyLogos()]);
 
   await PowerPoint.run(async context => {
     const slide = await getSelectedSlide(context);
     slide.shapes.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
-    // Delete only IssueFlow-managed shapes. Manual images/annotations remain untouched.
+    // Delete only IssueFlow-managed shapes. Manual reference images/annotations remain.
     for (const shape of slide.shapes.items) {
       const managed = shape.tags.items.find(t => t.key === TAG_MANAGED && t.value === "TRUE");
       if (managed) shape.delete();
     }
     await context.sync();
 
-    const navy = "#13283A";
-    const blue = "#1F78B4";
-    const border = "#C9D5DE";
-    const lightBlue = "#EDF6FC";
+    const navy = "#17344C";
+    const text = "#26343F";
+    const muted = "#6F7F8A";
+    const line = "#AFC3D1";
+    const softBlue = "#EAF5FB";
+    const softRose = "#FFF1F1";
+    const softGold = "#FFF8E2";
 
-    // Header
-    markManaged(addRect(slide, 0, 0, 960, 62, navy, navy), "HEADER_BG");
-    markManaged(addText(slide, "DAILY PAINKILLER", 32, 16, 155, 22, { size: 11, bold: true, color: "#DDEAF2" }), "HEADER_BRAND");
-    markManaged(addText(slide, issue.issueId, 195, 13, 300, 28, { size: 20, bold: true, color: "#FFFFFF" }), "HEADER_ID");
-    markManaged(addText(slide, `Created ${formatDate(issue.createdAt)}`, 700, 13, 220, 18, { size: 8.5, color: "#DDEAF2" }), "HEADER_CREATED");
-    if (issue.updatedAt) {
-      markManaged(addText(slide, `Updated ${formatDate(issue.updatedAt)}`, 700, 31, 220, 18, { size: 8.5, color: "#DDEAF2" }), "HEADER_UPDATED");
-    }
+    // --------------------------------------------------------
+    // HEADER: party cells use all parties in the party library.
+    // Issue ID and Date/Time sit immediately to the right.
+    // --------------------------------------------------------
+    const headerTop = 4;
+    const headerHeight = 72;
+    const issueIdWidth = 132;
+    const dateWidth = 178;
+    const logoAreaWidth = 960 - issueIdWidth - dateWidth;
+    const partyCount = Math.max(parties.length, 1);
+    const logoCellWidth = logoAreaWidth / partyCount;
 
-    // Section headings
-    markManaged(addRect(slide, 28, 84, 246, 28, lightBlue, blue), "DESCRIPTION_HEAD_BG");
-    markManaged(addText(slide, "ISSUE DESCRIPTION", 40, 90, 220, 18, { size: 9, bold: true, color: "#174A7E" }), "DESCRIPTION_HEAD");
-    markManaged(addRect(slide, 286, 84, 322, 28, "#F4F6F8", border), "REFERENCE_HEAD_BG");
-    markManaged(addText(slide, "REFERENCE / IMAGES  ·  MANUAL AREA", 298, 90, 285, 18, { size: 9, bold: true, color: "#4E5B66" }), "REFERENCE_HEAD");
-    markManaged(addRect(slide, 620, 84, 312, 28, "#F4F6F8", border), "ACTIONS_HEAD_BG");
-    markManaged(addText(slide, "ACTIONS", 632, 90, 180, 18, { size: 9, bold: true, color: "#4E5B66" }), "ACTIONS_HEAD");
-    markManaged(addText(slide, `Overall: ${computeOverallStatus(issue.actions)}`, 815, 90, 100, 18, { size: 8.5, bold: true, color: statusColor(computeOverallStatus(issue.actions)).text }), "OVERALL_STATUS");
+    // Party cells.
+    parties.forEach((party, index) => {
+      const left = index * logoCellWidth;
 
-    // Description area
-    markManaged(addRect(slide, 28, 112, 246, 370, "#FFFFFF", border, true), "DESCRIPTION_BG");
-    markManaged(addText(slide, issue.description || "No description yet.", 42, 130, 218, 330, { size: 11, color: "#26343F" }), "DESCRIPTION_TEXT");
+      // Soft fill, no box outline. Only vertical separators.
+      const bg = addRect(slide, left, headerTop, logoCellWidth, headerHeight, "#F5FBFE", "#F5FBFE");
+      bg.lineFormat.weight = 0;
+      markManaged(bg, `HEADER_PARTY_BG_${index}`);
 
-    // Reference area: border only, with no covering fill. Existing manual images remain visible.
-    markManaged(addRect(slide, 286, 112, 322, 1, border, border), "REFERENCE_BORDER_TOP");
-    markManaged(addRect(slide, 286, 481, 322, 1, border, border), "REFERENCE_BORDER_BOTTOM");
-    markManaged(addRect(slide, 286, 112, 1, 370, border, border), "REFERENCE_BORDER_LEFT");
-    markManaged(addRect(slide, 607, 112, 1, 370, border, border), "REFERENCE_BORDER_RIGHT");
-    markManaged(addText(slide, "Paste / crop / annotate images freely in this area", 320, 442, 255, 20, { size: 8.5, color: "#94A0AA" }), "REFERENCE_HINT");
-
-    // Actions area
-    markManaged(addRect(slide, 620, 112, 312, 370, "#FFFFFF", border, true), "ACTIONS_BG");
-
-    const actions = issue.actions;
-    if (!actions.length) {
-      markManaged(addText(slide, "No actions yet\nUse IssueFlow > Actions > + Add Action", 655, 230, 245, 60, { size: 11, color: "#7B8791" }), "ACTIONS_EMPTY");
-    } else {
-      const maxRows = 6;
-      const visible = actions.slice(0, maxRows);
-      const rowHeight = Math.floor(334 / Math.max(visible.length, 1));
-      visible.forEach((action, index) => {
-        const top = 124 + index * rowHeight;
-        const h = Math.max(48, rowHeight - 6);
-        const sc = statusColor(action.status);
-        markManaged(addRect(slide, 632, top, 288, h, "#FAFCFD", "#DFE6EB", true), `ACTION_${action.id}_BG`);
-        markManaged(addText(slide, action.party, 644, top + 8, 84, 17, { size: 9, bold: true, color: "#26343F" }), `ACTION_${action.id}_PARTY`);
-        markManaged(addText(slide, action.action, 735, top + 7, 118, Math.max(20, h - 14), { size: 8.7, color: "#26343F" }), `ACTION_${action.id}_TEXT`);
-        const chip = markManaged(addRect(slide, 858, top + 8, 52, 18, sc.fill, sc.line, true), `ACTION_${action.id}_STATUS_BG`);
-        markManaged(addText(slide, action.status, 861, top + 11, 46, 12, { size: 7.3, bold: true, color: sc.text }), `ACTION_${action.id}_STATUS`);
-        if (action.remark) {
-          markManaged(addText(slide, action.remark, 644, top + h - 18, 260, 12, { size: 7.5, color: "#75818B" }), `ACTION_${action.id}_REMARK`);
-        }
-      });
-      if (actions.length > maxRows) {
-        markManaged(addText(slide, `+ ${actions.length - maxRows} more action(s) — see Action Register`, 650, 463, 252, 15, { size: 8, color: blue }), "ACTIONS_MORE");
+      if (index > 0) {
+        markManaged(addLine(slide, left, headerTop + 8, 0, headerHeight - 16, "#B8D5E6", 1), `HEADER_PARTY_SEP_${index}`);
       }
+
+      const logoData = partyLogos[party];
+      let pictureAdded = false;
+
+      if (logoData && typeof slide.shapes.addPicture === "function") {
+        try {
+          const base64 = dataUrlToBase64(logoData);
+          const maxW = Math.max(34, logoCellWidth - 20);
+          const picW = Math.min(maxW, 82);
+          const picture = slide.shapes.addPicture(base64, {
+            left: left + (logoCellWidth - picW) / 2,
+            top: headerTop + 8,
+            width: picW,
+            height: 38
+          });
+          markManaged(picture, `HEADER_PARTY_LOGO_${index}`);
+          pictureAdded = true;
+        } catch (error) {
+          console.warn(`Could not render logo for ${party}.`, error);
+        }
+      }
+
+      markManaged(addText(
+        slide,
+        party,
+        left + 6,
+        headerTop + (pictureAdded ? 50 : 26),
+        logoCellWidth - 12,
+        16,
+        {
+          size: Math.max(6.5, Math.min(9, logoCellWidth / 13)),
+          bold: true,
+          color: "#174A6A"
+        }
+      ), `HEADER_PARTY_NAME_${index}`);
+    });
+
+    if (!parties.length) {
+      markManaged(addText(slide, "Add parties / logos in Settings", 24, headerTop + 25, logoAreaWidth - 48, 18, {
+        size: 9,
+        color: muted
+      }), "HEADER_NO_PARTIES");
     }
 
-    // Small footer credit.
-    markManaged(addText(slide, "Brought to you by Daily Painkiller + Codex", 32, 510, 300, 12, { size: 7.2, color: "#89959E" }), "FOOTER_BRAND");
+    // Issue ID box.
+    const issueLeft = logoAreaWidth;
+    const issueBg = addRect(slide, issueLeft, headerTop, issueIdWidth, headerHeight, softRose, softRose);
+    issueBg.lineFormat.weight = 0;
+    markManaged(issueBg, "HEADER_ISSUE_BG");
+    markManaged(addLine(slide, issueLeft, headerTop, 0, headerHeight, "#DAB3B3", 1.2), "HEADER_ISSUE_LEFT");
+    markManaged(addText(slide, "ISSUE ID", issueLeft + 10, headerTop + 8, issueIdWidth - 20, 14, {
+      size: 7.2, bold: true, color: "#694747"
+    }), "HEADER_ISSUE_LABEL");
+    markManaged(addText(slide, issue.issueId, issueLeft + 10, headerTop + 25, issueIdWidth - 20, 24, {
+      size: 17, bold: true, color: "#17212B"
+    }), "HEADER_ISSUE_ID");
+    if (issue.areaCode) {
+      markManaged(addText(slide, issue.areaCode, issueLeft + 10, headerTop + 52, issueIdWidth - 20, 12, {
+        size: 7.2, bold: true, color: "#835F5F"
+      }), "HEADER_AREA_CODE");
+    }
+
+    // Date / time box.
+    const dateLeft = issueLeft + issueIdWidth;
+    const dateBg = addRect(slide, dateLeft, headerTop, dateWidth, headerHeight, softGold, softGold);
+    dateBg.lineFormat.weight = 0;
+    markManaged(dateBg, "HEADER_DATE_BG");
+    markManaged(addLine(slide, dateLeft, headerTop, 0, headerHeight, "#E1C971", 1.2), "HEADER_DATE_LEFT");
+    markManaged(addText(slide, `Created  ${formatDate(issue.createdAt)}`, dateLeft + 12, headerTop + 14, dateWidth - 24, 16, {
+      size: 7.5, bold: true, color: "#3D4850"
+    }), "HEADER_CREATED");
+    if (issue.updatedAt) {
+      markManaged(addText(slide, `Updated  ${formatDate(issue.updatedAt)}`, dateLeft + 12, headerTop + 39, dateWidth - 24, 16, {
+        size: 7.5, color: "#3D4850"
+      }), "HEADER_UPDATED");
+    }
+
+    // Thin baseline only.
+    markManaged(addLine(slide, 0, headerTop + headerHeight, 960, 0, "#8DB2C8", 1.4), "HEADER_BASELINE");
+
+    // --------------------------------------------------------
+    // MAIN LAYOUT
+    // Description | Room strip | Reference Images | Actions
+    // --------------------------------------------------------
+    const mainTop = 92;
+    const mainBottom = 520;
+    const contentTop = 126;
+    const contentHeight = mainBottom - contentTop;
+
+    const descriptionLeft = 16;
+    const descriptionWidth = 248;
+
+    const roomLeft = descriptionLeft + descriptionWidth + 8;
+    const roomWidth = 42;
+
+    const referenceLeft = roomLeft + roomWidth + 8;
+    const referenceWidth = 286;
+
+    const actionsLeft = referenceLeft + referenceWidth + 12;
+    const actionsWidth = 960 - actionsLeft - 16;
+
+    // Headers: text + one underline, no unnecessary border boxes.
+    addSectionHeader(slide, "ISSUE DESCRIPTION", descriptionLeft, mainTop, descriptionWidth, {
+      role: "DESCRIPTION_HEAD"
+    });
+    addSectionHeader(slide, "REFERENCE IMAGES", referenceLeft, mainTop, referenceWidth, {
+      role: "REFERENCE_HEAD"
+    });
+    addSectionHeader(slide, "ACTIONS", actionsLeft, mainTop, actionsWidth, {
+      role: "ACTIONS_HEAD"
+    });
+
+    // Description: only the necessary separator/baseline lines.
+    markManaged(addLine(slide, descriptionLeft, contentTop, descriptionWidth, 0, line, 1.2), "DESCRIPTION_TOP");
+    markManaged(addLine(slide, descriptionLeft + descriptionWidth, contentTop, 0, contentHeight, line, 1.2), "DESCRIPTION_RIGHT");
+    markManaged(addLine(slide, descriptionLeft, mainBottom, descriptionWidth, 0, line, 1.2), "DESCRIPTION_BOTTOM");
+    markManaged(addText(slide, issue.description || "No description yet.", descriptionLeft + 12, contentTop + 14, descriptionWidth - 26, contentHeight - 26, {
+      size: 10.5,
+      color: text
+    }), "DESCRIPTION_TEXT");
+
+    // Room / Space strip: vertically rotated text like "Basement-1".
+    // Minimal separator lines only.
+    markManaged(addLine(slide, roomLeft, contentTop, 0, contentHeight, line, 1.2), "ROOM_LEFT");
+    markManaged(addLine(slide, roomLeft + roomWidth, contentTop, 0, contentHeight, line, 1.2), "ROOM_RIGHT");
+
+    const roomLabel = markManaged(addText(
+      slide,
+      issue.roomName || "Room / Space",
+      roomLeft + 9,
+      contentTop + 68,
+      contentHeight - 136,
+      24,
+      {
+        size: 10.5,
+        bold: true,
+        color: "#17212B"
+      }
+    ), "ROOM_NAME");
+    roomLabel.rotation = 270;
+
+    // Reference area remains intentionally blank/manual.
+    // Only subtle top/bottom separators are generated.
+    markManaged(addLine(slide, referenceLeft, contentTop, referenceWidth, 0, line, 1.2), "REFERENCE_TOP");
+    markManaged(addLine(slide, referenceLeft + referenceWidth, contentTop, 0, contentHeight, line, 1.2), "REFERENCE_RIGHT");
+    markManaged(addLine(slide, referenceLeft, mainBottom, referenceWidth, 0, line, 1.2), "REFERENCE_BOTTOM");
+
+    // --------------------------------------------------------
+    // ACTIONS: exactly N rows for N actions.
+    // Action By | Action Required | Status.
+    // No Remark, no rounded cards, no unused rows.
+    // --------------------------------------------------------
+    const tableTop = contentTop;
+    const tableBottom = mainBottom;
+    const headerH = 30;
+
+    const partyW = Math.round(actionsWidth * 0.24);
+    const statusW = Math.round(actionsWidth * 0.22);
+    const actionW = actionsWidth - partyW - statusW;
+
+    const partyX = actionsLeft;
+    const actionX = partyX + partyW;
+    const statusX = actionX + actionW;
+
+    // Column headers.
+    markManaged(addText(slide, "Action By", partyX + 8, tableTop + 7, partyW - 16, 14, {
+      size: 8.4, bold: true, color: "#243746"
+    }), "ACTIONS_COL_PARTY");
+    markManaged(addText(slide, "Action Required", actionX + 8, tableTop + 7, actionW - 16, 14, {
+      size: 8.4, bold: true, color: "#243746"
+    }), "ACTIONS_COL_ACTION");
+    markManaged(addText(slide, "Status", statusX + 8, tableTop + 7, statusW - 16, 14, {
+      size: 8.4, bold: true, color: "#243746"
+    }), "ACTIONS_COL_STATUS");
+
+    markManaged(addLine(slide, actionsLeft, tableTop + headerH, actionsWidth, 0, line, 1.2), "ACTIONS_HEADER_LINE");
+    markManaged(addLine(slide, actionX, tableTop, 0, tableBottom - tableTop, line, 1.0), "ACTIONS_SEP_1");
+    markManaged(addLine(slide, statusX, tableTop, 0, tableBottom - tableTop, line, 1.0), "ACTIONS_SEP_2");
+    markManaged(addLine(slide, actionsLeft + actionsWidth, tableTop, 0, tableBottom - tableTop, line, 1.2), "ACTIONS_RIGHT");
+    markManaged(addLine(slide, actionsLeft, tableBottom, actionsWidth, 0, line, 1.2), "ACTIONS_BOTTOM");
+
+    const actions = issue.actions || [];
+    const overall = computeOverallStatus(actions);
+    markManaged(addText(slide, `Overall: ${overall}`, actionsLeft + actionsWidth - 104, mainTop + 3, 100, 14, {
+      size: 7.3,
+      bold: true,
+      color: statusColor(overall).text
+    }), "OVERALL_STATUS");
+
+    if (!actions.length) {
+      markManaged(addText(slide, "No actions yet", actionsLeft + 10, tableTop + 62, actionsWidth - 20, 20, {
+        size: 10,
+        color: muted
+      }), "ACTIONS_EMPTY");
+    } else {
+      const rowsTop = tableTop + headerH;
+      const rowsHeight = tableBottom - rowsTop;
+      const rowHeight = rowsHeight / actions.length;
+
+      actions.forEach((action, index) => {
+        const rowTop = rowsTop + index * rowHeight;
+        const rowBottom = rowsTop + (index + 1) * rowHeight;
+        const rowTextSize = rowHeight >= 70 ? 9.4 : rowHeight >= 48 ? 8.5 : 7.2;
+        const sc = statusColor(action.status);
+
+        if (index > 0) {
+          markManaged(addLine(slide, actionsLeft, rowTop, actionsWidth, 0, line, 1.0), `ACTION_${action.id}_ROW_LINE`);
+        }
+
+        markManaged(addText(slide, action.party || "—", partyX + 8, rowTop + 9, partyW - 16, Math.max(16, rowHeight - 18), {
+          size: rowTextSize,
+          bold: true,
+          color: text
+        }), `ACTION_${action.id}_PARTY`);
+
+        markManaged(addText(slide, action.action || "—", actionX + 8, rowTop + 9, actionW - 16, Math.max(16, rowHeight - 18), {
+          size: rowTextSize,
+          color: text
+        }), `ACTION_${action.id}_TEXT`);
+
+        // Status uses text with a subtle status-colored underline rather than a rounded chip.
+        markManaged(addText(slide, action.status || "—", statusX + 8, rowTop + 9, statusW - 16, 18, {
+          size: rowTextSize,
+          bold: true,
+          color: sc.text
+        }), `ACTION_${action.id}_STATUS`);
+        markManaged(addLine(slide, statusX + 8, Math.min(rowBottom - 10, rowTop + 30), statusW - 16, 0, sc.line, 2), `ACTION_${action.id}_STATUS_LINE`);
+      });
+    }
+
     await context.sync();
   });
 
@@ -644,13 +1057,15 @@ async function readAllIssues() {
       const issueId = slide.tags.items.find(t => t.key === TAG_ISSUE_ID)?.value;
       if (!issueId) continue;
       const description = slide.tags.items.find(t => t.key === TAG_DESCRIPTION_V2)?.value || "";
+      const areaCode = slide.tags.items.find(t => t.key === TAG_AREA_CODE_V2)?.value || "";
+      const roomName = slide.tags.items.find(t => t.key === TAG_ROOM_NAME_V2)?.value || "";
       const actionsRaw = slide.tags.items.find(t => t.key === TAG_ACTIONS_V2)?.value || "[]";
       const createdAt = slide.tags.items.find(t => t.key === TAG_CREATED_AT)?.value || "";
       const updatedAt = slide.tags.items.find(t => t.key === TAG_UPDATED_AT)?.value || "";
       let actions = [];
       try { actions = JSON.parse(actionsRaw); } catch { actions = []; }
       if (!Array.isArray(actions)) actions = [];
-      issues.push({ slideId: slide.id, issueId, description, actions, createdAt, updatedAt });
+      issues.push({ slideId: slide.id, issueId, areaCode, roomName, description, actions, createdAt, updatedAt });
     }
     issues.sort((a, b) => a.issueId.localeCompare(b.issueId, undefined, { numeric: true }));
     return issues;
@@ -763,7 +1178,6 @@ function buildDashboard(slide, issues) {
     addText(slide, `${count}`, 890, 245 + i*34, 30, 16, { size: 9, bold: true, color: "#1F78B4" });
   });
 
-  addText(slide, "Brought to you by Daily Painkiller + Codex", 40, 510, 300, 12, { size: 7.2, color: "#89959E" });
 }
 
 function groupIssuesForRegister(issues, maxRows = 9) {
@@ -808,53 +1222,94 @@ function buildRegisterPage(slide, groups, pageNo, pageCount) {
   addText(slide, "ACTION REGISTER", 36, 17, 420, 26, { size: 22, bold: true, color: "#FFFFFF" });
   addText(slide, `Page ${pageNo} of ${pageCount}`, 800, 20, 120, 17, { size: 9, color: "#DCE7EF" });
 
-  const left = 28;
+  const left = 24;
   const top = 92;
   const rowH = 42;
-  const widths = [100, 235, 120, 250, 110, 85];
-  const headers = ["Issue ID", "Description", "Party", "Action", "Remark", "Status"];
+  const widths = [92, 104, 214, 105, 280, 105];
+  const headers = ["Issue ID", "Area / Room", "Description", "Action By", "Action Required", "Status"];
+
   let x = left;
-  headers.forEach((h, i) => {
-    addRect(slide, x, top, widths[i], 28, "#18324A", "#18324A");
-    addText(slide, h, x + 7, top + 8, widths[i]-12, 12, { size: 8.3, bold: true, color: "#FFFFFF" });
-    x += widths[i];
+  headers.forEach((header, index) => {
+    addRect(slide, x, top, widths[index], 28, "#18324A", "#18324A");
+    addText(slide, header, x + 7, top + 8, widths[index] - 12, 12, {
+      size: 8.0,
+      bold: true,
+      color: "#FFFFFF"
+    });
+    x += widths[index];
   });
 
   let rowIndex = 0;
+
   groups.forEach(group => {
     const issue = group.issue;
-    const actions = issue.actions.length ? issue.actions : [{ party: "—", action: "No actions", remark: "", status: "—" }];
+    const actions = issue.actions.length
+      ? issue.actions
+      : [{ party: "—", action: "No actions", status: "—" }];
+
     const visibleActions = actions.slice(group.start, group.start + group.count);
     const groupTop = top + 28 + rowIndex * rowH;
     const groupHeight = visibleActions.length * rowH;
 
-    // Merged Issue ID and Description cells.
+    // Grouped Issue ID
     addRect(slide, left, groupTop, widths[0], groupHeight, "#F5F8FA", "#D8E1E7");
-    addText(slide, issue.issueId, left + 8, groupTop + 10, widths[0]-16, Math.max(18, groupHeight-16), { size: 9.5, bold: true, color: "#1769AA" });
+    addText(slide, issue.issueId, left + 8, groupTop + 10, widths[0] - 16, Math.max(18, groupHeight - 16), {
+      size: 9.2,
+      bold: true,
+      color: "#1769AA"
+    });
 
-    const descLeft = left + widths[0];
-    addRect(slide, descLeft, groupTop, widths[1], groupHeight, "#FFFFFF", "#D8E1E7");
-    addText(slide, issue.description || "—", descLeft + 8, groupTop + 8, widths[1]-16, Math.max(20, groupHeight-14), { size: 8.7, color: "#26343F" });
+    // Grouped Area / Room
+    const areaLeft = left + widths[0];
+    addRect(slide, areaLeft, groupTop, widths[1], groupHeight, "#FBFCFD", "#D8E1E7");
+    const areaRoom = [issue.areaCode, issue.roomName].filter(Boolean).join("\n");
+    addText(slide, areaRoom || "—", areaLeft + 8, groupTop + 8, widths[1] - 16, Math.max(20, groupHeight - 14), {
+      size: 8.3,
+      color: "#26343F"
+    });
+
+    // Grouped Description
+    const descLeft = areaLeft + widths[1];
+    addRect(slide, descLeft, groupTop, widths[2], groupHeight, "#FFFFFF", "#D8E1E7");
+    addText(slide, issue.description || "—", descLeft + 8, groupTop + 8, widths[2] - 16, Math.max(20, groupHeight - 14), {
+      size: 8.3,
+      color: "#26343F"
+    });
 
     visibleActions.forEach((action, localIndex) => {
       const y = groupTop + localIndex * rowH;
-      const baseX = descLeft + widths[1];
-      const values = [action.party || "—", action.action || "—", action.remark || "", action.status || "—"];
-      const dataWidths = widths.slice(2);
-      let dx = baseX;
-      values.forEach((value, i) => {
-        const isStatus = i === 3;
+      let dx = descLeft + widths[2];
+
+      const values = [
+        action.party || "—",
+        action.action || "—",
+        action.status || "—"
+      ];
+      const dataWidths = widths.slice(3);
+
+      values.forEach((value, index) => {
+        const isStatus = index === 2;
         const sc = isStatus ? statusColor(value) : null;
-        addRect(slide, dx, y, dataWidths[i], rowH, isStatus ? sc.fill : (rowIndex % 2 ? "#F9FBFC" : "#FFFFFF"), isStatus ? sc.line : "#D8E1E7");
-        addText(slide, value, dx + 7, y + 9, dataWidths[i]-14, rowH-14, { size: isStatus ? 8.5 : 8.3, bold: isStatus, color: isStatus ? sc.text : "#26343F" });
-        dx += dataWidths[i];
+        addRect(
+          slide,
+          dx,
+          y,
+          dataWidths[index],
+          rowH,
+          isStatus ? sc.fill : (rowIndex % 2 ? "#F9FBFC" : "#FFFFFF"),
+          isStatus ? sc.line : "#D8E1E7"
+        );
+        addText(slide, value, dx + 7, y + 9, dataWidths[index] - 14, rowH - 14, {
+          size: isStatus ? 8.4 : 8.2,
+          bold: isStatus,
+          color: isStatus ? sc.text : "#26343F"
+        });
+        dx += dataWidths[index];
       });
+
       rowIndex++;
     });
   });
-
-  addText(slide, "Issue ID and Description are grouped; each party action keeps its own status.", 32, 505, 580, 12, { size: 7.2, color: "#89959E" });
-  addText(slide, "Daily Painkiller + Codex", 770, 505, 150, 12, { size: 7.2, color: "#89959E" });
 }
 
 async function generateSummary() {
@@ -921,6 +1376,8 @@ async function validatePresentation() {
     if (!id) errors.push("A tracked slide has no Issue ID.");
     if (seen.has(id)) errors.push(`${id}: duplicate Issue ID.`);
     seen.add(id);
+    if (!cleanText(issue.areaCode)) errors.push(`${id}: area code is empty.`);
+    if (!cleanText(issue.roomName)) errors.push(`${id}: room / space is empty.`);
     if (!cleanText(issue.description)) errors.push(`${id}: description is empty.`);
     issue.actions.forEach(action => {
       if (!cleanText(action.party)) errors.push(`${id}/${action.id}: party is empty.`);

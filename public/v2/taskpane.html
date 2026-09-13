@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IssueFlow for PowerPoint</title>
-  <link rel="stylesheet" href="taskpane.css?v=2.0.0-alpha.1" />
+  <link rel="stylesheet" href="taskpane.css?v=2.0.0-alpha.3" />
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 <body>
@@ -14,7 +14,7 @@
       <div class="brand-copy">
         <div class="brand-row">
           <h1>IssueFlow</h1>
-          <span class="version">V2 Alpha</span>
+          <span class="version">V2 Alpha.3</span>
         </div>
         <p>PowerPoint issue & action manager</p>
       </div>
@@ -43,6 +43,17 @@
           <button id="setIssueId" class="btn btn-secondary">Set ID</button>
         </div>
 
+        <div class="two-col">
+          <div>
+            <label for="areaCode">Area Code</label>
+            <input id="areaCode" placeholder="L1-Z03" autocomplete="off" />
+          </div>
+          <div>
+            <label for="roomName">Room / Space</label>
+            <input id="roomName" placeholder="Basement-1" autocomplete="off" />
+          </div>
+        </div>
+
         <label for="issueDescription">Description</label>
         <textarea id="issueDescription" rows="4" placeholder="Describe the coordination issue..."></textarea>
 
@@ -51,7 +62,7 @@
           <button id="createIssueSheet" class="btn btn-primary">Create / Refresh Sheet</button>
         </div>
 
-        <p class="hint">The Reference / Images area stays manual. Paste, crop, resize and annotate images directly in PowerPoint.</p>
+        <p class="hint">Reference Images stays manual. Paste, crop, resize and annotate images directly in PowerPoint.</p>
       </div>
 
       <div class="card compact-card">
@@ -87,16 +98,8 @@
         <label for="actionText">Action required</label>
         <textarea id="actionText" rows="3" placeholder="e.g. To review ceiling clearance"></textarea>
 
-        <div class="two-col">
-          <div>
-            <label for="actionStatus">Status</label>
-            <select id="actionStatus"></select>
-          </div>
-          <div>
-            <label for="actionRemark">Remark</label>
-            <input id="actionRemark" placeholder="Optional" />
-          </div>
-        </div>
+        <label for="actionStatus">Status</label>
+        <select id="actionStatus"></select>
 
         <button id="saveAction" class="btn btn-primary full-width">+ Add Action</button>
       </div>
@@ -120,7 +123,7 @@
       <div class="card">
         <span class="eyebrow">REPORTING</span>
         <h2>Dashboard & Action Register</h2>
-        <p class="muted">Issue ID and Description are grouped once. Party actions remain individual rows so each status can be tracked independently.</p>
+        <p class="muted">Issue ID, Area/Room and Description are grouped once. Each party action keeps its own Action Required and Status.</p>
         <button id="generateSummary" class="btn btn-primary full-width">Generate / Refresh Summary</button>
       </div>
 
@@ -137,12 +140,14 @@
     <section id="panel-settings" class="tab-panel">
       <div class="card">
         <span class="eyebrow">LIBRARIES</span>
-        <h2>Responsible parties</h2>
-        <div id="partyList" class="library-list"></div>
+        <h2>Responsible parties & logos</h2>
+        <p class="hint">Every party in this list gets an equal logo/header cell. Upload PNG, JPG or WebP when available.</p>
+        <div id="partyList" class="library-list party-logo-list"></div>
         <div class="row">
           <input id="newParty" placeholder="Add party" />
           <button id="addParty" class="btn btn-secondary">Add</button>
         </div>
+        <input id="partyLogoFile" type="file" accept="image/png,image/jpeg,image/webp" hidden />
       </div>
 
       <div class="card">
@@ -165,10 +170,10 @@
 
     <footer class="app-footer">
       <span>Brought to you by <strong>Daily Painkiller</strong> + <strong>Codex</strong></span>
-      <span class="footer-version">2.0.0-alpha.1</span>
+      <span class="footer-version">2.0.0-alpha.3</span>
     </footer>
   </main>
 
-  <script src="taskpane.js?v=2.0.0-alpha.1"></script>
+  <script src="taskpane.js?v=2.0.0-alpha.3"></script>
 </body>
 </html>
