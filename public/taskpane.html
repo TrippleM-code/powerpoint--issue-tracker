@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>PowerPoint Issue Tracker</title>
-  <link rel="stylesheet" href="taskpane.css?v=1.3.1" />
+  <link rel="stylesheet" href="taskpane.css?v=1.4.0" />
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 <body>
   <main class="app">
-    <h1>Issue Tracker <span style="font-size:11px;font-weight:400;color:#6b7280;">v1.3.1</span></h1>
+    <h1>Issue Tracker <span style="font-size:11px;font-weight:400;color:#6b7280;">v1.4.0</span></h1>
     <p class="muted">One issue per slide. PowerPoint controls visual formatting; the add-in controls tracker data.</p>
 
     <section class="card">
@@ -27,6 +27,7 @@
         <button id="addDescription">+ Description</button>
         <button id="addStatus">+ Status</button>
         <button id="addRemark">+ Remark</button>
+        <button id="resetLayout">Reset Box Layout</button>
       </div>
     </section>
 
@@ -53,7 +54,7 @@
         <select id="issueNavigator"></select>
         <button id="goToIssue">Go</button>
       </div>
-      <p class="muted small">Uses the Issue ID, not the PowerPoint slide number.</p>
+      <p class="muted small">Uses the Issue ID, not the PowerPoint slide number. Use Go for direct no-warning navigation.</p>
     </section>
 
     <section class="card">
@@ -67,6 +68,6 @@
     </section>
   </main>
 
-  <script src="taskpane.js?v=1.3.1"></script>
+  <script src="taskpane.js?v=1.4.0"></script>
 </body>
 </html>

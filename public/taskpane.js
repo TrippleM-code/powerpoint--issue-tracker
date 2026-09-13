@@ -27,7 +27,7 @@ Office.onReady((info) => {
 function bindUi() {
   ["issueId","setIssueId","issueStatus","addDescription","addStatus","addRemark",
    "statusSelect","applyStatus","statusList","newStatus","addStatusValue",
-   "issueNavigator","goToIssue","repairCurrentSlide","validate","generateSummary","result"]
+   "issueNavigator","goToIssue","resetLayout","repairCurrentSlide","validate","generateSummary","result"]
   .forEach(id => ui[id] = document.getElementById(id));
 
   ui.setIssueId.addEventListener("click", () => setIssueId().catch(showError));
@@ -37,6 +37,7 @@ function bindUi() {
   ui.applyStatus.addEventListener("click", () => applyStatus().catch(showError));
   ui.addStatusValue.addEventListener("click", () => addStatusValue().catch(showError));
   ui.goToIssue.addEventListener("click", () => goToIssue().catch(showError));
+  ui.resetLayout.addEventListener("click", () => resetBoxLayout().catch(showError));
   ui.repairCurrentSlide.addEventListener("click", () => repairCurrentSlide().catch(showError));
   ui.validate.addEventListener("click", () => validatePresentation().catch(showError));
   ui.generateSummary.addEventListener("click", () => generateSummary().catch(showError));
@@ -166,9 +167,13 @@ async function requireIssueId() {
 }
 
 function defaultBoxOptions(type) {
-  if (type === BOX_DESCRIPTION) return { left:36, top:360, width:360, height:100 };
-  if (type === BOX_STATUS) return { left:420, top:360, width:160, height:50 };
-  return { left:36, top:470, width:544, height:90 };
+  if (type === BOX_DESCRIPTION) {
+    return { left: 36, top: 110, width: 330, height: 58 };
+  }
+  if (type === BOX_STATUS) {
+    return { left: 390, top: 110, width: 180, height: 58 };
+  }
+  return { left: 594, top: 110, width: 330, height: 58 };
 }
 
 function initialText(type, status) {
@@ -211,6 +216,41 @@ async function addBox(type) {
   });
 
   showResult(`${type} box added.`);
+}
+
+async function resetBoxLayout() {
+  await PowerPoint.run(async (context) => {
+    const slide = await getSelectedSlide(context);
+    slide.shapes.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    const positions = {
+      [BOX_DESCRIPTION]: { left: 36, top: 110, width: 330, height: 58 },
+      [BOX_STATUS]: { left: 390, top: 110, width: 180, height: 58 },
+      [BOX_REMARK]: { left: 594, top: 110, width: 330, height: 58 }
+    };
+
+    let count = 0;
+
+    for (const shape of slide.shapes.items) {
+      const typeTag = shape.tags.items.find(t => t.key === TAG_BOX_TYPE);
+      if (!typeTag) continue;
+
+      const position = positions[typeTag.value];
+      if (!position) continue;
+
+      shape.left = position.left;
+      shape.top = position.top;
+      shape.width = position.width;
+      shape.height = position.height;
+      shape.textFrame.wordWrap = true;
+      shape.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+      count++;
+    }
+
+    await context.sync();
+    showResult(`Reset ${count} tracker box(es) to the standard one-line layout.`);
+  });
 }
 
 async function refreshStatusUi() {
@@ -533,7 +573,7 @@ async function syncIssueTrackingMetadata(issues) {
       }
 
       if (!snapshotTag?.value) {
-        // First V1.3 refresh establishes the baseline and does not count as an update.
+        // First V1.4 refresh establishes the baseline and does not count as an update.
         slide.tags.add(TAG_SNAPSHOT_HASH, currentHash);
         issue.updatedAt = updatedTag?.value || "";
       } else if (snapshotTag.value !== currentHash) {
@@ -568,14 +608,25 @@ async function deleteExistingSummarySlides() {
 async function addBlankTaggedSlide(context, type) {
   const slides = context.presentation.slides;
   const count = slides.getCount();
+
   slides.add();
   await context.sync();
 
   const slide = slides.getItemAt(count.value);
-  slide.load("id");
+  slide.load("id,shapes/items/id");
+  await context.sync();
+
+  // Remove all shapes inherited from the current PowerPoint layout.
+  // This gives every generated Dashboard/Register page a clean blank canvas.
+  for (const shape of slide.shapes.items) {
+    shape.delete();
+  }
+  await context.sync();
+
   slide.tags.add(TAG_SUMMARY, "TRUE");
   slide.tags.add(TAG_SUMMARY_TYPE, type);
   slide.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
+
   await context.sync();
   return slide;
 }
@@ -794,7 +845,7 @@ async function buildDashboard(slide, issues, statusCounts) {
   });
 }
 
-async function buildRegisterSlide(slide, pageIssues, pageNumber, pageCount, targetSlideNumbers) {
+async function buildRegisterSlide(slide, pageIssues, pageNumber, pageCount) {
   const header = slide.shapes.addGeometricShape(
     PowerPoint.GeometricShapeType.rectangle,
     { left: 0, top: 0, width: 960, height: 58 }
@@ -836,26 +887,25 @@ async function buildRegisterSlide(slide, pageIssues, pageNumber, pageCount, targ
     specificCellProperties
   });
 
-  // Overlay Issue IDs so they can be visually emphasized and linked separately.
-  // Office.js does not officially expose native internal slide targets. We try the
-  // PowerPoint action URI; the task-pane Issue Navigator is the guaranteed fallback.
+  // Overlay Issue IDs as the stable user-facing identity.
+  // No ppaction:// hyperlink is assigned because PowerPoint displays a security warning.
+  // Use Issue Navigator > Go for direct no-warning navigation by Issue ID.
   pageIssues.forEach((issue, idx) => {
     const y = tableTop + rowHeight * (idx + 1) + 4;
-    const idShape = addText(slide, issue.issueId, tableLeft + 7, y, 115, 18, 9.5, true, "#1769AA");
+    const idShape = addText(
+      slide,
+      issue.issueId,
+      tableLeft + 7,
+      y,
+      115,
+      18,
+      9.5,
+      true,
+      "#1769AA"
+    );
     idShape.tags.add(TAG_LINK_ID, issue.issueId);
-
-    const slideNo = targetSlideNumbers.get(issue.slideId);
-    if (slideNo && typeof idShape.setHyperlink === "function") {
-      try {
-        idShape.setHyperlink({
-          address: `ppaction://hlinkshowjump?jump=${slideNo}`,
-          screenTip: `Open ${issue.issueId}`
-        });
-      } catch (e) {
-        console.warn(`Could not create internal link for ${issue.issueId}.`, e);
-      }
-    }
   });
+
 }
 
 async function updateIssueFooters(issues) {
@@ -883,11 +933,11 @@ async function updateIssueFooters(issues) {
         existing.textFrame.textRange.text = footerText;
       } else {
         const footer = slide.shapes.addTextBox(footerText, {
-          left: 40, top: 510, width: 880, height: 18
+          left: 40, top: 522, width: 880, height: 14
         });
         footer.name = `PIT_FOOTER_${issue.issueId}`;
         footer.textFrame.textRange.font.name = "Aptos";
-        footer.textFrame.textRange.font.size = 8.5;
+        footer.textFrame.textRange.font.size = 8;
         footer.textFrame.textRange.font.color = "#65727E";
         footer.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
         footer.tags.add(TAG_FOOTER, "TRUE");
@@ -943,13 +993,6 @@ async function generateSummary() {
     await context.sync();
   });
 
-  // Re-read final slide positions after summary pages are inserted/moved.
-  const targetSlideNumbers = await PowerPoint.run(async (context) => {
-    const slides = context.presentation.slides;
-    slides.load("items/id,index");
-    await context.sync();
-    return new Map(slides.items.map(s => [s.id, s.index + 1]));
-  });
 
   const statusCounts = {};
   issues.forEach(issue => {
@@ -968,7 +1011,7 @@ async function generateSummary() {
         p * rowsPerRegisterSlide,
         (p + 1) * rowsPerRegisterSlide
       );
-      await buildRegisterSlide(register, pageIssues, p + 1, pageCount, targetSlideNumbers);
+      await buildRegisterSlide(register, pageIssues, p + 1, pageCount);
     }
 
     await context.sync();
