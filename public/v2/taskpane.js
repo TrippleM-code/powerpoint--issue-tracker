@@ -112,13 +112,22 @@ function statusClass(status) {
   return "neutral";
 }
 
+const THEME = {
+  navy: "#19364F",
+  text: "#26343F",
+  muted: "#6F7F8A",
+  grid: "#D9E2E8",
+  gridStrong: "#C4D0D8",
+  white: "#FFFFFF"
+};
+
 function statusColor(status) {
   const s = cleanText(status).toLowerCase();
-  if (s === "open") return { fill: "#FDE8E8", line: "#D64545", text: "#8A1F1F" };
-  if (s === "in progress") return { fill: "#E6F0FF", line: "#3A78C2", text: "#174A7E" };
-  if (s === "pending") return { fill: "#FFF4D6", line: "#D89A2B", text: "#7A560F" };
-  if (s === "closed") return { fill: "#E7F6EC", line: "#2F8F5B", text: "#1E603D" };
-  return { fill: "#EEF2F5", line: "#7A8590", text: "#35424E" };
+  if (s === "open") return { fill: "#FDEBEC", text: "#9D1C1C", line: "#E64A4A" };
+  if (s === "in progress") return { fill: "#EAF3FF", text: "#174A7E", line: "#3A78C2" };
+  if (s === "pending") return { fill: "#FFF5DB", text: "#7A560F", line: "#D89A2B" };
+  if (s === "closed") return { fill: "#E9F7EE", text: "#1E603D", line: "#2F8F5B" };
+  return { fill: "#F1F4F6", text: "#4B5964", line: "#AEBBC5" };
 }
 
 function computeOverallStatus(actions) {
@@ -786,282 +795,193 @@ async function createOrRefreshIssueSheet() {
     slide.shapes.load("items/id,items/tags/key,items/tags/value");
     await context.sync();
 
-    // Delete only IssueFlow-managed shapes. Manual reference images/annotations remain.
     for (const shape of slide.shapes.items) {
       const managed = shape.tags.items.find(t => t.key === TAG_MANAGED && t.value === "TRUE");
       if (managed) shape.delete();
     }
     await context.sync();
 
-    const navy = "#17344C";
-    const text = "#26343F";
-    const muted = "#6F7F8A";
-    const line = "#AFC3D1";
-    const softBlue = "#EAF5FB";
-    const softRose = "#FFF1F1";
-    const softGold = "#FFF8E2";
+    const W = 960;
+    const headerH = 76;
+    const issueW = 132;
+    const dateW = 176;
+    const logoAreaW = W - issueW - dateW;
+    const logoCellW = logoAreaW / Math.max(1, parties.length);
 
-    // --------------------------------------------------------
-    // HEADER: party cells use all parties in the party library.
-    // Issue ID and Date/Time sit immediately to the right.
-    // --------------------------------------------------------
-    const headerTop = 4;
-    const headerHeight = 72;
-    const issueIdWidth = 132;
-    const dateWidth = 178;
-    const logoAreaWidth = 960 - issueIdWidth - dateWidth;
-    const partyCount = Math.max(parties.length, 1);
-    const logoCellWidth = logoAreaWidth / partyCount;
+    markManaged(addRect(slide, 0, 0, logoAreaW, headerH, "#F8FBFD", "#F8FBFD"), "HEADER_LOGO_BG");
 
-    // Party cells.
     parties.forEach((party, index) => {
-      const left = index * logoCellWidth;
-
-      // Soft fill, no box outline. Only vertical separators.
-      const bg = addRect(slide, left, headerTop, logoCellWidth, headerHeight, "#F5FBFE", "#F5FBFE");
-      bg.lineFormat.weight = 0;
-      markManaged(bg, `HEADER_PARTY_BG_${index}`);
-
+      const x = index * logoCellW;
       if (index > 0) {
-        markManaged(addLine(slide, left, headerTop + 8, 0, headerHeight - 16, "#B8D5E6", 1), `HEADER_PARTY_SEP_${index}`);
+        markManaged(addLine(slide, x, 12, 0, headerH - 24, "#C7D9E5", 1), `HEADER_SEP_${index}`);
       }
 
       const logoData = partyLogos[party];
-      let pictureAdded = false;
+      let logoShown = false;
 
       if (logoData) {
         try {
           const base64 = dataUrlToBase64(logoData);
-          const maxW = Math.max(28, logoCellWidth - 20);
-          const logoW = Math.min(maxW, 78);
-          const logoH = 34;
-
-          // Use a normal rectangle with picture fill.
-          // ShapeFill.setImage is more broadly supported than the preview addPicture API.
-          const logoShape = slide.shapes.addGeometricShape(
+          const maxW = Math.max(28, logoCellW - 24);
+          const logoW = Math.min(72, maxW);
+          const logoBox = slide.shapes.addGeometricShape(
             PowerPoint.GeometricShapeType.rectangle,
-            {
-              left: left + (logoCellWidth - logoW) / 2,
-              top: headerTop + 7,
-              width: logoW,
-              height: logoH
-            }
+            { left: x + (logoCellW - logoW) / 2, top: 9, width: logoW, height: 34 }
           );
-          logoShape.fill.setImage(base64);
-          logoShape.lineFormat.color = "#F5FBFE";
-          logoShape.lineFormat.weight = 0;
-          markManaged(logoShape, `HEADER_PARTY_LOGO_${index}`);
-          pictureAdded = true;
+          logoBox.fill.setImage(base64);
+          logoBox.lineFormat.color = "#F8FBFD";
+          logoBox.lineFormat.weight = 0;
+          markManaged(logoBox, `HEADER_LOGO_${index}`);
+          logoShown = true;
         } catch (error) {
           console.warn(`Could not render logo for ${party}.`, error);
         }
       }
 
-      markManaged(addText(
-        slide,
-        party,
-        left + 6,
-        headerTop + (pictureAdded ? 50 : 26),
-        logoCellWidth - 12,
-        16,
-        {
-          size: Math.max(6.5, Math.min(9, logoCellWidth / 13)),
-          bold: true,
-          color: "#174A6A"
-        }
-      ), `HEADER_PARTY_NAME_${index}`);
+      markManaged(addText(slide, party, x + 6, logoShown ? 48 : 30, logoCellW - 12, 16, {
+        size: Math.max(6.5, Math.min(8.5, logoCellW / 13)),
+        bold: true,
+        color: THEME.navy
+      }), `HEADER_PARTY_${index}`);
     });
 
     if (!parties.length) {
-      markManaged(addText(slide, "Add parties / logos in Settings", 24, headerTop + 25, logoAreaWidth - 48, 18, {
-        size: 9,
-        color: muted
+      markManaged(addText(slide, "Add parties / logos in Settings", 20, 29, logoAreaW - 40, 18, {
+        size: 8.5, color: THEME.muted
       }), "HEADER_NO_PARTIES");
     }
 
-    // Issue ID box.
-    const issueLeft = logoAreaWidth;
-    const issueBg = addRect(slide, issueLeft, headerTop, issueIdWidth, headerHeight, softRose, softRose);
-    issueBg.lineFormat.weight = 0;
-    markManaged(issueBg, "HEADER_ISSUE_BG");
-    markManaged(addLine(slide, issueLeft, headerTop, 0, headerHeight, "#DAB3B3", 1.2), "HEADER_ISSUE_LEFT");
-    markManaged(addText(slide, "ISSUE ID", issueLeft + 10, headerTop + 8, issueIdWidth - 20, 14, {
-      size: 7.2, bold: true, color: "#694747"
-    }), "HEADER_ISSUE_LABEL");
-    markManaged(addText(slide, issue.issueId, issueLeft + 10, headerTop + 25, issueIdWidth - 20, 24, {
+    const issueX = logoAreaW;
+    markManaged(addRect(slide, issueX, 0, issueW, headerH, "#FFF4F4", "#FFF4F4"), "ISSUE_BG");
+    markManaged(addText(slide, "ISSUE ID", issueX + 14, 12, issueW - 28, 12, {
+      size: 7.2, bold: true, color: "#6A4B4B"
+    }), "ISSUE_LABEL");
+    markManaged(addText(slide, issue.issueId, issueX + 14, 27, issueW - 28, 24, {
       size: 17, bold: true, color: "#17212B"
-    }), "HEADER_ISSUE_ID");
+    }), "ISSUE_ID");
     if (issue.areaCode) {
-      markManaged(addText(slide, issue.areaCode, issueLeft + 10, headerTop + 52, issueIdWidth - 20, 12, {
-        size: 7.2, bold: true, color: "#835F5F"
-      }), "HEADER_AREA_CODE");
+      markManaged(addText(slide, issue.areaCode, issueX + 14, 54, issueW - 28, 12, {
+        size: 7.3, bold: true, color: "#6A4B4B"
+      }), "ISSUE_AREA");
     }
 
-    // Date / time box.
-    const dateLeft = issueLeft + issueIdWidth;
-    const dateBg = addRect(slide, dateLeft, headerTop, dateWidth, headerHeight, softGold, softGold);
-    dateBg.lineFormat.weight = 0;
-    markManaged(dateBg, "HEADER_DATE_BG");
-    markManaged(addLine(slide, dateLeft, headerTop, 0, headerHeight, "#E1C971", 1.2), "HEADER_DATE_LEFT");
-    markManaged(addText(slide, `Created  ${formatDate(issue.createdAt)}`, dateLeft + 12, headerTop + 14, dateWidth - 24, 16, {
-      size: 7.5, bold: true, color: "#3D4850"
-    }), "HEADER_CREATED");
+    const dateX = issueX + issueW;
+    markManaged(addRect(slide, dateX, 0, dateW, headerH, "#FFF9E8", "#FFF9E8"), "DATE_BG");
+    markManaged(addText(slide, `Created  ${formatDate(issue.createdAt)}`, dateX + 12, 18, dateW - 24, 16, {
+      size: 7.3, bold: true, color: THEME.text
+    }), "DATE_CREATED");
     if (issue.updatedAt) {
-      markManaged(addText(slide, `Updated  ${formatDate(issue.updatedAt)}`, dateLeft + 12, headerTop + 39, dateWidth - 24, 16, {
-        size: 7.5, color: "#3D4850"
-      }), "HEADER_UPDATED");
+      markManaged(addText(slide, `Updated  ${formatDate(issue.updatedAt)}`, dateX + 12, 43, dateW - 24, 16, {
+        size: 7.3, color: THEME.text
+      }), "DATE_UPDATED");
     }
 
-    // Thin baseline only.
-    markManaged(addLine(slide, 0, headerTop + headerHeight, 960, 0, "#8DB2C8", 1.4), "HEADER_BASELINE");
+    markManaged(addRect(slide, 0, headerH, W, 2, THEME.navy, THEME.navy), "HEADER_BASE");
 
-    // --------------------------------------------------------
-    // MAIN LAYOUT
-    // Description | Room strip | Reference Images | Actions
-    // --------------------------------------------------------
-    const mainTop = 92;
-    const mainBottom = 520;
-    const contentTop = 126;
-    const contentHeight = mainBottom - contentTop;
+    const mainTop = 96;
+    const sectionH = 28;
+    const bodyTop = mainTop + sectionH;
+    const bodyBottom = 520;
+    const bodyH = bodyBottom - bodyTop;
 
-    const descriptionLeft = 16;
-    const descriptionWidth = 248;
+    const margin = 18;
+    const gap = 10;
+    const descW = 246;
+    const roomW = 38;
+    const refW = 300;
+    const actionsW = W - margin * 2 - descW - roomW - refW - gap * 3;
 
-    const roomLeft = descriptionLeft + descriptionWidth + 8;
-    const roomWidth = 42;
+    const descX = margin;
+    const roomX = descX + descW + gap;
+    const refX = roomX + roomW + gap;
+    const actionsX = refX + refW + gap;
 
-    const referenceLeft = roomLeft + roomWidth + 8;
-    const referenceWidth = 286;
+    function sectionHeader(title, x, width, role) {
+      markManaged(addRect(slide, x, mainTop, width, sectionH, THEME.navy, THEME.navy), `${role}_HDR_BG`);
+      markManaged(addText(slide, title, x + 10, mainTop + 8, width - 20, 14, {
+        size: 8.8, bold: true, color: "#FFFFFF"
+      }), `${role}_HDR_TEXT`);
+    }
 
-    const actionsLeft = referenceLeft + referenceWidth + 12;
-    const actionsWidth = 960 - actionsLeft - 16;
+    sectionHeader("ISSUE DESCRIPTION", descX, descW, "DESC");
+    sectionHeader("REFERENCE IMAGES", refX, refW, "REF");
+    sectionHeader("ACTIONS", actionsX, actionsW, "ACT");
 
-    // Headers: text + one underline, no unnecessary border boxes.
-    addSectionHeader(slide, "ISSUE DESCRIPTION", descriptionLeft, mainTop, descriptionWidth, {
-      role: "DESCRIPTION_HEAD"
-    });
-    addSectionHeader(slide, "REFERENCE IMAGES", referenceLeft, mainTop, referenceWidth, {
-      role: "REFERENCE_HEAD"
-    });
-    addSectionHeader(slide, "ACTIONS", actionsLeft, mainTop, actionsWidth, {
-      role: "ACTIONS_HEAD"
-    });
+    markManaged(addRect(slide, descX, bodyTop, descW, bodyH, "#FFFFFF", THEME.grid), "DESC_BODY");
+    markManaged(addText(slide, issue.description || "No description yet.", descX + 12, bodyTop + 14, descW - 24, bodyH - 28, {
+      size: 10.2, color: THEME.text
+    }), "DESC_TEXT");
 
-    // Description: only the necessary separator/baseline lines.
-    markManaged(addLine(slide, descriptionLeft, contentTop, descriptionWidth, 0, line, 1.2), "DESCRIPTION_TOP");
-    markManaged(addLine(slide, descriptionLeft + descriptionWidth, contentTop, 0, contentHeight, line, 1.2), "DESCRIPTION_RIGHT");
-    markManaged(addLine(slide, descriptionLeft, mainBottom, descriptionWidth, 0, line, 1.2), "DESCRIPTION_BOTTOM");
-    markManaged(addText(slide, issue.description || "No description yet.", descriptionLeft + 12, contentTop + 14, descriptionWidth - 26, contentHeight - 26, {
-      size: 10.5,
-      color: text
-    }), "DESCRIPTION_TEXT");
-
-    // Room / Space strip: vertically rotated text like "Basement-1".
-    // Minimal separator lines only.
-    markManaged(addLine(slide, roomLeft, contentTop, 0, contentHeight, line, 1.2), "ROOM_LEFT");
-    markManaged(addLine(slide, roomLeft + roomWidth, contentTop, 0, contentHeight, line, 1.2), "ROOM_RIGHT");
-
-    const roomLabel = markManaged(addText(
-      slide,
-      issue.roomName || "Room / Space",
-      roomLeft + 9,
-      contentTop + 68,
-      contentHeight - 136,
-      24,
-      {
-        size: 10.5,
-        bold: true,
-        color: "#17212B"
-      }
-    ), "ROOM_NAME");
+    markManaged(addRect(slide, roomX, bodyTop, roomW, bodyH, "#FFFFFF", THEME.grid), "ROOM_BODY");
+    const roomLabel = markManaged(addText(slide, issue.roomName || "Room / Space", roomX + 7, bodyTop + 52, bodyH - 104, 22, {
+      size: 10, bold: true, color: THEME.text
+    }), "ROOM_TEXT");
     roomLabel.rotation = 270;
 
-    // Reference area remains intentionally blank/manual.
-    // Only subtle top/bottom separators are generated.
-    markManaged(addLine(slide, referenceLeft, contentTop, referenceWidth, 0, line, 1.2), "REFERENCE_TOP");
-    markManaged(addLine(slide, referenceLeft + referenceWidth, contentTop, 0, contentHeight, line, 1.2), "REFERENCE_RIGHT");
-    markManaged(addLine(slide, referenceLeft, mainBottom, referenceWidth, 0, line, 1.2), "REFERENCE_BOTTOM");
+    markManaged(addRect(slide, refX, bodyTop, refW, bodyH, "#FFFFFF", THEME.grid), "REF_BODY");
 
-    // --------------------------------------------------------
-    // ACTIONS: exactly N rows for N actions.
-    // Action By | Action Required | Status.
-    // No legacy extra field, no rounded cards, no unused rows.
-    // --------------------------------------------------------
-    const tableTop = contentTop;
-    const tableBottom = mainBottom;
-    const headerH = 30;
+    const colHeadH = 30;
+    const rowsTop = bodyTop + colHeadH;
+    const rowsH = bodyBottom - rowsTop;
+    const partyW = Math.round(actionsW * 0.24);
+    const statusW = Math.round(actionsW * 0.23);
+    const actionW = actionsW - partyW - statusW;
 
-    const partyW = Math.round(actionsWidth * 0.24);
-    const statusW = Math.round(actionsWidth * 0.22);
-    const actionW = actionsWidth - partyW - statusW;
-
-    const partyX = actionsLeft;
+    const partyX = actionsX;
     const actionX = partyX + partyW;
     const statusX = actionX + actionW;
 
-    // Column headers.
-    markManaged(addText(slide, "Action By", partyX + 8, tableTop + 7, partyW - 16, 14, {
-      size: 8.4, bold: true, color: "#243746"
-    }), "ACTIONS_COL_PARTY");
-    markManaged(addText(slide, "Action Required", actionX + 8, tableTop + 7, actionW - 16, 14, {
-      size: 8.4, bold: true, color: "#243746"
-    }), "ACTIONS_COL_ACTION");
-    markManaged(addText(slide, "Status", statusX + 8, tableTop + 7, statusW - 16, 14, {
-      size: 8.4, bold: true, color: "#243746"
-    }), "ACTIONS_COL_STATUS");
+    markManaged(addRect(slide, actionsX, bodyTop, actionsW, colHeadH, "#F1F5F8", THEME.gridStrong), "ACT_COL_HDR");
+    markManaged(addText(slide, "Action By", partyX + 8, bodyTop + 9, partyW - 16, 13, {
+      size: 8.2, bold: true, color: THEME.navy
+    }), "ACT_HDR_PARTY");
+    markManaged(addText(slide, "Action Required", actionX + 8, bodyTop + 9, actionW - 16, 13, {
+      size: 8.2, bold: true, color: THEME.navy
+    }), "ACT_HDR_ACTION");
+    markManaged(addText(slide, "Status", statusX + 8, bodyTop + 9, statusW - 16, 13, {
+      size: 8.2, bold: true, color: THEME.navy
+    }), "ACT_HDR_STATUS");
 
-    markManaged(addLine(slide, actionsLeft, tableTop + headerH, actionsWidth, 0, line, 1.2), "ACTIONS_HEADER_LINE");
-    markManaged(addLine(slide, actionX, tableTop, 0, tableBottom - tableTop, line, 1.0), "ACTIONS_SEP_1");
-    markManaged(addLine(slide, statusX, tableTop, 0, tableBottom - tableTop, line, 1.0), "ACTIONS_SEP_2");
-    markManaged(addLine(slide, actionsLeft + actionsWidth, tableTop, 0, tableBottom - tableTop, line, 1.2), "ACTIONS_RIGHT");
-    markManaged(addLine(slide, actionsLeft, tableBottom, actionsWidth, 0, line, 1.2), "ACTIONS_BOTTOM");
+    markManaged(addRect(slide, actionsX, bodyTop, actionsW, bodyH, "#FFFFFF", THEME.grid), "ACT_BODY");
+    markManaged(addLine(slide, actionX, bodyTop, 0, bodyH, THEME.gridStrong, 1), "ACT_SEP1");
+    markManaged(addLine(slide, statusX, bodyTop, 0, bodyH, THEME.gridStrong, 1), "ACT_SEP2");
+    markManaged(addLine(slide, actionsX, bodyTop + colHeadH, actionsW, 0, THEME.gridStrong, 1), "ACT_HEAD_LINE");
 
     const actions = issue.actions || [];
     const overall = computeOverallStatus(actions);
-    markManaged(addText(slide, `Overall: ${overall}`, actionsLeft + actionsWidth - 104, mainTop + 3, 100, 14, {
-      size: 7.3,
-      bold: true,
-      color: statusColor(overall).text
-    }), "OVERALL_STATUS");
+    const overallColor = statusColor(overall);
+    markManaged(addText(slide, `Overall: ${overall}`, actionsX + actionsW - 120, mainTop + 8, 110, 14, {
+      size: 7.4, bold: true, color: overallColor.text
+    }), "ACT_OVERALL");
 
     if (!actions.length) {
-      markManaged(addText(slide, "No actions yet", actionsLeft + 10, tableTop + 62, actionsWidth - 20, 20, {
-        size: 10,
-        color: muted
-      }), "ACTIONS_EMPTY");
+      markManaged(addText(slide, "No actions yet", actionsX + 12, rowsTop + 22, actionsW - 24, 18, {
+        size: 9, color: THEME.muted
+      }), "ACT_EMPTY");
     } else {
-      const rowsTop = tableTop + headerH;
-      const rowsHeight = tableBottom - rowsTop;
-      const rowHeight = rowsHeight / actions.length;
+      const rowH = rowsH / actions.length;
 
       actions.forEach((action, index) => {
-        const rowTop = rowsTop + index * rowHeight;
-        const rowBottom = rowsTop + (index + 1) * rowHeight;
-        const rowTextSize = rowHeight >= 70 ? 9.4 : rowHeight >= 48 ? 8.5 : 7.2;
+        const y = rowsTop + index * rowH;
         const sc = statusColor(action.status);
+        const fontSize = rowH >= 72 ? 9.2 : rowH >= 50 ? 8.5 : 7.4;
 
         if (index > 0) {
-          markManaged(addLine(slide, actionsLeft, rowTop, actionsWidth, 0, line, 1.0), `ACTION_${action.id}_ROW_LINE`);
+          markManaged(addLine(slide, actionsX, y, actionsW, 0, THEME.grid, 1), `ACT_ROW_${index}`);
         }
 
-        markManaged(addText(slide, action.party || "—", partyX + 8, rowTop + 9, partyW - 16, Math.max(16, rowHeight - 18), {
-          size: rowTextSize,
-          bold: true,
-          color: text
-        }), `ACTION_${action.id}_PARTY`);
+        markManaged(addText(slide, action.party || "—", partyX + 10, y + 12, partyW - 20, Math.max(20, rowH - 22), {
+          size: fontSize, bold: true, color: THEME.text
+        }), `ACT_PARTY_${index}`);
 
-        markManaged(addText(slide, action.action || "—", actionX + 8, rowTop + 9, actionW - 16, Math.max(16, rowHeight - 18), {
-          size: rowTextSize,
-          color: text
-        }), `ACTION_${action.id}_TEXT`);
+        markManaged(addText(slide, action.action || "—", actionX + 10, y + 12, actionW - 20, Math.max(20, rowH - 22), {
+          size: fontSize, color: THEME.text
+        }), `ACT_TEXT_${index}`);
 
-        // Status uses text with a subtle status-colored underline rather than a rounded chip.
-        markManaged(addText(slide, action.status || "—", statusX + 8, rowTop + 9, statusW - 16, 18, {
-          size: rowTextSize,
-          bold: true,
-          color: sc.text
-        }), `ACTION_${action.id}_STATUS`);
-        markManaged(addLine(slide, statusX + 8, Math.min(rowBottom - 10, rowTop + 30), statusW - 16, 0, sc.line, 2), `ACTION_${action.id}_STATUS_LINE`);
+        markManaged(addRect(slide, statusX, y, statusW, rowH, sc.fill, sc.line), `ACT_STATUS_BG_${index}`);
+        markManaged(addText(slide, action.status || "—", statusX + 10, y + 12, statusW - 20, Math.max(18, rowH - 22), {
+          size: fontSize, bold: true, color: sc.text
+        }), `ACT_STATUS_${index}`);
       });
     }
 
@@ -1079,81 +999,33 @@ async function readAllIssues() {
 
     const issues = [];
     for (const slide of slides.items) {
-      const issueId = slide.tags.items.find(t => t.key === TAG_ISSUE_ID)?.value;
+      const issueId = slide.tags.items.find(t => t.key === TAG_ISSUE_ID)?.value || "";
       if (!issueId) continue;
-      const description = slide.tags.items.find(t => t.key === TAG_DESCRIPTION_V2)?.value || "";
-      const areaCode = slide.tags.items.find(t => t.key === TAG_AREA_CODE_V2)?.value || "";
-      const roomName = slide.tags.items.find(t => t.key === TAG_ROOM_NAME_V2)?.value || "";
-      const actionsRaw = slide.tags.items.find(t => t.key === TAG_ACTIONS_V2)?.value || "[]";
-      const createdAt = slide.tags.items.find(t => t.key === TAG_CREATED_AT)?.value || "";
-      const updatedAt = slide.tags.items.find(t => t.key === TAG_UPDATED_AT)?.value || "";
+
       let actions = [];
-      try { actions = JSON.parse(actionsRaw); } catch { actions = []; }
-      if (!Array.isArray(actions)) actions = [];
-      issues.push({ slideId: slide.id, issueId, areaCode, roomName, description, actions, createdAt, updatedAt });
+      const actionJson = slide.tags.items.find(t => t.key === TAG_ACTIONS_JSON)?.value || "[]";
+      try {
+        const parsed = JSON.parse(actionJson);
+        if (Array.isArray(parsed)) actions = parsed;
+      } catch {
+        actions = [];
+      }
+
+      issues.push({
+        slideId: slide.id,
+        issueId,
+        areaCode: slide.tags.items.find(t => t.key === TAG_AREA_CODE_V2)?.value || "",
+        roomName: slide.tags.items.find(t => t.key === TAG_ROOM_NAME_V2)?.value || "",
+        description: slide.tags.items.find(t => t.key === TAG_DESCRIPTION_V2)?.value || "",
+        actions,
+        createdAt: slide.tags.items.find(t => t.key === TAG_CREATED_AT)?.value || "",
+        updatedAt: slide.tags.items.find(t => t.key === TAG_UPDATED_AT)?.value || ""
+      });
     }
+
     issues.sort((a, b) => a.issueId.localeCompare(b.issueId, undefined, { numeric: true }));
     return issues;
   });
-}
-
-async function refreshIssueNavigator() {
-  const issues = await readAllIssues();
-  const previous = ui.issueNavigator.value;
-  ui.issueNavigator.innerHTML = "";
-  issues.forEach(issue => {
-    const option = document.createElement("option");
-    option.value = issue.issueId;
-    option.textContent = issue.issueId;
-    ui.issueNavigator.appendChild(option);
-  });
-  if (issues.some(i => i.issueId === previous)) ui.issueNavigator.value = previous;
-}
-
-async function goToIssue() {
-  const issueId = cleanIssueId(ui.issueNavigator.value);
-  if (!issueId) throw new Error("No issue is available to navigate to.");
-
-  await PowerPoint.run(async context => {
-    const slides = context.presentation.slides;
-    slides.load("items/id,items/tags/key,items/tags/value");
-    await context.sync();
-    const target = slides.items.find(slide => cleanIssueId(slide.tags.items.find(t => t.key === TAG_ISSUE_ID)?.value) === issueId);
-    if (!target) throw new Error(`Could not find ${issueId}.`);
-    context.presentation.setSelectedSlides([target.id]);
-    await context.sync();
-  });
-
-  await loadCurrentIssue();
-  showToast(`Opened ${issueId}.`);
-}
-
-async function deleteExistingSummarySlides() {
-  await PowerPoint.run(async context => {
-    const slides = context.presentation.slides;
-    slides.load("items/id,items/tags/key,items/tags/value");
-    await context.sync();
-    const generated = slides.items.filter(slide => slide.tags.items.find(t => t.key === TAG_SUMMARY)?.value === "TRUE");
-    generated.forEach(slide => slide.delete());
-    await context.sync();
-  });
-}
-
-async function addCleanGeneratedSlide(context, type) {
-  const slides = context.presentation.slides;
-  const count = slides.getCount();
-  slides.add();
-  await context.sync();
-  const slide = slides.getItemAt(count.value);
-  slide.load("id,shapes/items/id");
-  await context.sync();
-  slide.shapes.items.forEach(shape => shape.delete());
-  await context.sync();
-  slide.tags.add(TAG_SUMMARY, "TRUE");
-  slide.tags.add(TAG_SUMMARY_TYPE, type);
-  slide.tags.add(TAG_APP, "ISSUEFLOW_V2");
-  await context.sync();
-  return slide;
 }
 
 function buildDashboard(slide, issues) {
@@ -1243,96 +1115,82 @@ function groupIssuesForRegister(issues, maxRows = 9) {
 }
 
 function buildRegisterPage(slide, groups, pageNo, pageCount) {
-  addRect(slide, 0, 0, 960, 62, "#13283A", "#13283A");
-  addText(slide, "ACTION REGISTER", 36, 17, 420, 26, { size: 22, bold: true, color: "#FFFFFF" });
-  addText(slide, `Page ${pageNo} of ${pageCount}`, 800, 20, 120, 17, { size: 9, color: "#DCE7EF" });
+  addRect(slide, 0, 0, 960, 58, THEME.navy, THEME.navy);
+  addText(slide, "ACTION REGISTER", 34, 16, 430, 24, {
+    size: 21, bold: true, color: "#FFFFFF"
+  });
+  addText(slide, `Page ${pageNo} of ${pageCount}`, 800, 19, 120, 16, {
+    size: 8.5, color: "#DCE7EF"
+  });
 
-  const left = 24;
-  const top = 92;
+  const left = 18;
+  const top = 82;
+  const headH = 30;
   const rowH = 42;
-  const widths = [92, 104, 214, 105, 280, 105];
+  const widths = [92, 104, 214, 104, 281, 125];
   const headers = ["Issue ID", "Area / Room", "Description", "Action By", "Action Required", "Status"];
 
   let x = left;
   headers.forEach((header, index) => {
-    addRect(slide, x, top, widths[index], 28, "#18324A", "#18324A");
-    addText(slide, header, x + 7, top + 8, widths[index] - 12, 12, {
-      size: 8.0,
-      bold: true,
-      color: "#FFFFFF"
+    addRect(slide, x, top, widths[index], headH, THEME.navy, THEME.navy);
+    addText(slide, header, x + 8, top + 9, widths[index] - 16, 12, {
+      size: 8.0, bold: true, color: "#FFFFFF"
     });
     x += widths[index];
   });
 
-  let rowIndex = 0;
+  let globalRow = 0;
 
   groups.forEach(group => {
     const issue = group.issue;
-    const actions = issue.actions.length
-      ? issue.actions
-      : [{ party: "—", action: "No actions", status: "—" }];
-
+    const actions = issue.actions.length ? issue.actions : [{ party: "—", action: "No actions", status: "—" }];
     const visibleActions = actions.slice(group.start, group.start + group.count);
-    const groupTop = top + 28 + rowIndex * rowH;
+    const groupTop = top + headH + globalRow * rowH;
     const groupHeight = visibleActions.length * rowH;
+    const issueFill = globalRow % 2 === 0 ? "#F7F9FB" : "#FFFFFF";
 
-    // Grouped Issue ID
-    addRect(slide, left, groupTop, widths[0], groupHeight, "#F5F8FA", "#D8E1E7");
-    addText(slide, issue.issueId, left + 8, groupTop + 10, widths[0] - 16, Math.max(18, groupHeight - 16), {
-      size: 9.2,
-      bold: true,
-      color: "#1769AA"
+    addRect(slide, left, groupTop, widths[0], groupHeight, issueFill, THEME.grid);
+    addText(slide, issue.issueId, left + 8, groupTop + 11, widths[0] - 16, Math.max(18, groupHeight - 16), {
+      size: 9.0, bold: true, color: "#1769AA"
     });
 
-    // Grouped Area / Room
     const areaLeft = left + widths[0];
-    addRect(slide, areaLeft, groupTop, widths[1], groupHeight, "#FBFCFD", "#D8E1E7");
-    const areaRoom = [issue.areaCode, issue.roomName].filter(Boolean).join("\n");
-    addText(slide, areaRoom || "—", areaLeft + 8, groupTop + 8, widths[1] - 16, Math.max(20, groupHeight - 14), {
-      size: 8.3,
-      color: "#26343F"
-    });
+    addRect(slide, areaLeft, groupTop, widths[1], groupHeight, issueFill, THEME.grid);
+    addText(slide, [issue.areaCode, issue.roomName].filter(Boolean).join("\n") || "—",
+      areaLeft + 8, groupTop + 10, widths[1] - 16, Math.max(18, groupHeight - 16), {
+        size: 8.1, color: THEME.text
+      });
 
-    // Grouped Description
     const descLeft = areaLeft + widths[1];
-    addRect(slide, descLeft, groupTop, widths[2], groupHeight, "#FFFFFF", "#D8E1E7");
-    addText(slide, issue.description || "—", descLeft + 8, groupTop + 8, widths[2] - 16, Math.max(20, groupHeight - 14), {
-      size: 8.3,
-      color: "#26343F"
+    addRect(slide, descLeft, groupTop, widths[2], groupHeight, issueFill, THEME.grid);
+    addText(slide, issue.description || "—", descLeft + 8, groupTop + 10, widths[2] - 16, Math.max(18, groupHeight - 16), {
+      size: 8.1, color: THEME.text
     });
 
     visibleActions.forEach((action, localIndex) => {
       const y = groupTop + localIndex * rowH;
+      const rowFill = (globalRow + localIndex) % 2 === 0 ? "#FFFFFF" : "#FAFBFC";
       let dx = descLeft + widths[2];
 
-      const values = [
-        action.party || "—",
-        action.action || "—",
-        action.status || "—"
-      ];
-      const dataWidths = widths.slice(3);
+      addRect(slide, dx, y, widths[3], rowH, rowFill, THEME.grid);
+      addText(slide, action.party || "—", dx + 8, y + 11, widths[3] - 16, rowH - 14, {
+        size: 8.1, color: THEME.text
+      });
+      dx += widths[3];
 
-      values.forEach((value, index) => {
-        const isStatus = index === 2;
-        const sc = isStatus ? statusColor(value) : null;
-        addRect(
-          slide,
-          dx,
-          y,
-          dataWidths[index],
-          rowH,
-          isStatus ? sc.fill : (rowIndex % 2 ? "#F9FBFC" : "#FFFFFF"),
-          isStatus ? sc.line : "#D8E1E7"
-        );
-        addText(slide, value, dx + 7, y + 9, dataWidths[index] - 14, rowH - 14, {
-          size: isStatus ? 8.4 : 8.2,
-          bold: isStatus,
-          color: isStatus ? sc.text : "#26343F"
-        });
-        dx += dataWidths[index];
+      addRect(slide, dx, y, widths[4], rowH, rowFill, THEME.grid);
+      addText(slide, action.action || "—", dx + 8, y + 11, widths[4] - 16, rowH - 14, {
+        size: 8.1, color: THEME.text
+      });
+      dx += widths[4];
+
+      const sc = statusColor(action.status);
+      addRect(slide, dx, y, widths[5], rowH, sc.fill, sc.line);
+      addText(slide, action.status || "—", dx + 10, y + 11, widths[5] - 20, rowH - 14, {
+        size: 8.3, bold: true, color: sc.text
       });
 
-      rowIndex++;
+      globalRow++;
     });
   });
 }
