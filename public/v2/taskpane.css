@@ -118,3 +118,12 @@ input:focus, textarea:focus, select:focus { border-color: #7bb0d2; box-shadow: 0
 .party-actions button {
   min-height:28px; padding:4px 6px; font-size:9px;
 }
+
+.navigator-input-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.navigator-input-wrap input {
+  width: 100%;
+  box-sizing: border-box;
+}

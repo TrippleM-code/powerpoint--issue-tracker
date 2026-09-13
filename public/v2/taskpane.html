@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IssueFlow for PowerPoint</title>
-  <link rel="stylesheet" href="taskpane.css?v=2.0.0-alpha.6.2" />
+  <link rel="stylesheet" href="taskpane.css?v=2.0.0-alpha.6.3" />
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 <body>
@@ -14,7 +14,7 @@
       <div class="brand-copy">
         <div class="brand-row">
           <h1>IssueFlow</h1>
-          <span class="version">V2 Alpha.6.2</span>
+          <span class="version">V2 Alpha.6.3</span>
         </div>
         <p>PowerPoint issue & action manager</p>
       </div>
@@ -76,9 +76,19 @@
       <div class="card compact-card">
         <span class="eyebrow">NAVIGATE</span>
         <div class="row">
-          <select id="issueNavigator"></select>
+          <div class="navigator-input-wrap">
+            <input
+              id="issueNavigatorInput"
+              list="issueNavigatorList"
+              placeholder="Type or paste Issue ID"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <datalist id="issueNavigatorList"></datalist>
+          </div>
           <button id="goToIssue" class="btn btn-secondary">Go</button>
         </div>
+        <p class="hint">Copy an Issue ID from the register, paste it here, then click Go.</p>
       </div>
     </section>
 
@@ -170,10 +180,10 @@
 
     <footer class="app-footer">
       <span>Brought to you by <strong>Daily Painkiller</strong> + <strong>Codex</strong></span>
-      <span class="footer-version">2.0.0-alpha.6.2</span>
+      <span class="footer-version">2.0.0-alpha.6.3</span>
     </footer>
   </main>
 
-  <script src="taskpane.js?v=2.0.0-alpha.6.2"></script>
+  <script src="taskpane.js?v=2.0.0-alpha.6.3"></script>
 </body>
 </html>

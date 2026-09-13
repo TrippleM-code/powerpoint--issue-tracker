@@ -36,7 +36,7 @@ function bindUi() {
   [
     "issueId","setIssueId","areaCode","roomName","issueDescription","saveIssue","createIssueSheet",
     "currentIssueHeading","overallStatusChip","issueActionCount","issueCreatedDate","issueUpdatedDate",
-    "issueNavigator","goToIssue",
+    "issueNavigatorInput","issueNavigatorList","goToIssue",
     "actionParty","actionText","actionStatus","saveAction","clearActionForm",
     "actionEditorTitle","actionList","actionsCountBadge","actionsEmpty",
     "generateSummary","previewIssues","previewActions","previewOpen","previewClosed",
@@ -51,6 +51,9 @@ function bindUi() {
   ui.saveIssue.addEventListener("click", () => saveIssueData().catch(showError));
   ui.createIssueSheet.addEventListener("click", () => createOrRefreshIssueSheet().catch(showError));
   ui.goToIssue.addEventListener("click", () => goToIssue().catch(showError));
+  ui.issueNavigatorInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") goToIssue().catch(showError);
+  });
 
   ui.saveAction.addEventListener("click", () => saveAction().catch(showError));
   ui.clearActionForm.addEventListener("click", clearActionForm);
@@ -65,9 +68,7 @@ function bindUi() {
 async function initialize() {
   await ensureLibraries();
   await refreshLibrariesUi();
-  await refreshIssueNavigator();
-  await loadCurrentIssueSafe();
-  await refreshSummaryPreview();
+  await refreshUiAfterChange();
 }
 
 function activateTab(name) {
@@ -389,6 +390,62 @@ function renderLibraryList(container, values, removeHandler) {
   });
 }
 
+
+async function refreshIssueNavigator() {
+  const issues = await readAllIssues();
+
+  ui.issueNavigatorList.innerHTML = "";
+  issues.forEach(issue => {
+    const option = document.createElement("option");
+    option.value = issue.issueId;
+    ui.issueNavigatorList.appendChild(option);
+  });
+
+  // Keep user-entered text. Only prefill when the box is empty.
+  if (!cleanText(ui.issueNavigatorInput.value)) {
+    const selected = await readSelectedIssue().catch(() => null);
+    if (selected?.issueId) {
+      ui.issueNavigatorInput.value = selected.issueId;
+    }
+  }
+}
+
+async function goToIssue() {
+  const requestedId = cleanIssueId(ui.issueNavigatorInput.value);
+  if (!requestedId) {
+    throw new Error("Type or paste an Issue ID first.");
+  }
+
+  await PowerPoint.run(async context => {
+    const slides = context.presentation.slides;
+    slides.load("items/id,items/tags/key,items/tags/value");
+    await context.sync();
+
+    const target = slides.items.find(slide => {
+      const value = slide.tags.items.find(t => t.key === TAG_ISSUE_ID)?.value || "";
+      return cleanIssueId(value) === requestedId;
+    });
+
+    if (!target) {
+      throw new Error(`Issue ID ${requestedId} was not found.`);
+    }
+
+    target.select();
+    await context.sync();
+  });
+
+  ui.issueNavigatorInput.value = requestedId;
+  await loadCurrentIssueSafe();
+  showToast(`Opened ${requestedId}.`);
+}
+
+
+async function refreshUiAfterChange() {
+  await loadCurrentIssueSafe();
+  await refreshIssueNavigator();
+  await refreshSummaryPreview();
+}
+
 async function loadCurrentIssueSafe() {
   try {
     await loadCurrentIssue();
@@ -497,8 +554,8 @@ async function setIssueId() {
     await context.sync();
   });
 
-  await refreshIssueNavigator();
-  await loadCurrentIssue();
+  await refreshUiAfterChange();
+  ui.issueNavigatorInput.value = issueId;
   showToast(`Issue ID set to ${issueId}.`);
 }
 
@@ -588,8 +645,7 @@ async function saveAction() {
   });
 
   clearActionForm();
-  await loadCurrentIssue();
-  await refreshSummaryPreview();
+  await refreshUiAfterChange();
   showToast(wasEditing ? "Action updated." : "Action added.");
 }
 
@@ -675,8 +731,7 @@ async function deleteAction(actionId) {
     await context.sync();
   });
 
-  await loadCurrentIssue();
-  await refreshSummaryPreview();
+  await refreshUiAfterChange();
   showToast("Action removed.");
 }
 
