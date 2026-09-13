@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="TaskPaneApp">
+  <Id>e4d5e08b-3d33-4f3a-bb68-33c87a8c4c31</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Daily Painkiller</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="IssueFlow Production Dev"/>
+  <Description DefaultValue="Structured PowerPoint issue and action management."/>
+  <SupportUrl DefaultValue="https://dailypainkiller.com/"/>
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://YOUR-PRODUCTION-DEV-URL.example.com/"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

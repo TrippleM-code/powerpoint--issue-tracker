@@ -1,0 +1,39 @@
+* { box-sizing: border-box; }
+:root {
+  font-family: Aptos, "Segoe UI", Arial, sans-serif;
+  color: #152336;
+  background: #f4f7fb;
+}
+body { margin: 0; }
+.app-shell { padding: 16px; max-width: 520px; margin: 0 auto; }
+.app-header { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:14px; }
+.eyebrow { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#52657a; }
+h1 { margin:3px 0 0; font-size:20px; }
+.version { font-size:11px; color:#6a7c90; padding-top:3px; }
+.card, .stats-card {
+  background:#fff; border:1px solid #dbe4ef; border-radius:14px; padding:14px;
+  box-shadow:0 2px 8px rgba(20,40,70,.05);
+}
+.section-title { font-size:13px; font-weight:800; margin-bottom:12px; }
+label { display:block; font-size:11px; font-weight:700; margin:11px 0 5px; color:#40546a; }
+input, textarea {
+  width:100%; border:1px solid #cbd7e5; border-radius:9px; padding:10px 11px; font:inherit; background:#fff;
+}
+input:focus, textarea:focus { outline:2px solid #7db7e8; outline-offset:1px; }
+textarea { resize:vertical; min-height:96px; }
+.button-stack { display:grid; gap:8px; margin-top:14px; }
+button {
+  border-radius:9px; padding:10px 12px; font-weight:700; cursor:pointer;
+}
+button.primary { background:#2485c1; color:#fff; border:1px solid #2485c1; }
+button.secondary { background:#fff; color:#152336; border:1px solid #cbd7e5; }
+button:disabled { opacity:.55; cursor:wait; }
+.hint { font-size:11px; line-height:1.45; color:#65788d; margin:12px 0 0; }
+.stats-card { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+.stats-card span { display:block; font-size:10px; text-transform:uppercase; color:#74869a; }
+.stats-card strong { display:block; margin-top:4px; font-size:12px; }
+.banner { margin-bottom:12px; padding:10px 12px; border-radius:9px; font-size:12px; }
+.banner.success { background:#eaf7ef; border:1px solid #bfe3cb; color:#205d36; }
+.banner.error { background:#fff0f0; border:1px solid #efc2c2; color:#8b2727; }
+.banner.info { background:#edf5fb; border:1px solid #c4dcec; color:#24516f; }
+.hidden { display:none; }

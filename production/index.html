@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IssueFlow</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <div class="eyebrow">IssueFlow</div>
+        <h1>PowerPoint Issue Manager</h1>
+      </div>
+      <span id="appVersion" class="version">Production V1 · P1</span>
+    </header>
+
+    <section id="statusBanner" class="banner hidden" role="status" aria-live="polite"></section>
+
+    <section class="card">
+      <div class="section-title">Issue</div>
+
+      <label for="issueId">Issue ID</label>
+      <input id="issueId" autocomplete="off" placeholder="e.g. MEP-001" />
+
+      <label for="areaCode">Area Code</label>
+      <input id="areaCode" autocomplete="off" placeholder="e.g. BASEMENT" />
+
+      <label for="roomSpace">Room / Space</label>
+      <input id="roomSpace" autocomplete="off" placeholder="e.g. TX Room Corridor" />
+
+      <label for="description">Description</label>
+      <textarea id="description" rows="5" placeholder="Describe the coordination issue"></textarea>
+
+      <div class="button-stack">
+        <button id="saveIssueBtn" class="secondary">Save Issue Data</button>
+        <button id="refreshSheetBtn" class="primary">Create / Refresh Sheet</button>
+      </div>
+
+      <p class="hint">
+        Reference Images remain manual in PowerPoint. IssueFlow does not delete or recreate your pasted images,
+        arrows, text boxes, or annotations.
+      </p>
+    </section>
+
+    <section class="stats-card" aria-label="Issue metadata">
+      <div><span>Created</span><strong id="createdAt">—</strong></div>
+      <div><span>Updated</span><strong id="updatedAt">—</strong></div>
+    </section>
+  </main>
+</body>
+</html>

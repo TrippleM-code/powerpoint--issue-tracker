@@ -6,7 +6,9 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "types": []
+    "types": [
+      "office-js"
+    ]
   },
   "include": [
     "src",
