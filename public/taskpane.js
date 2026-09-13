@@ -176,6 +176,106 @@ function defaultBoxOptions(type) {
   return { left: 594, top: 110, width: 330, height: 58 };
 }
 
+
+function getTrackerBoxStyle(type, status = "") {
+  if (type === BOX_DESCRIPTION) {
+    return {
+      fill: "#EAF3FF",
+      border: "#3A78C2",
+      text: "#173A63",
+      heading: "#174A7E"
+    };
+  }
+
+  if (type === BOX_REMARK) {
+    return {
+      fill: "#F3F4F6",
+      border: "#7A8590",
+      text: "#26323D",
+      heading: "#35424E"
+    };
+  }
+
+  const s = cleanStatus(status).toLowerCase();
+
+  if (s === "open") {
+    return {
+      fill: "#FDE8E8",
+      border: "#D64545",
+      text: "#8A1F1F",
+      heading: "#8A1F1F"
+    };
+  }
+
+  if (s === "in progress") {
+    return {
+      fill: "#E6F0FF",
+      border: "#3A78C2",
+      text: "#174A7E",
+      heading: "#174A7E"
+    };
+  }
+
+  if (s === "pending") {
+    return {
+      fill: "#FFF4D6",
+      border: "#D89A2B",
+      text: "#7A560F",
+      heading: "#7A560F"
+    };
+  }
+
+  if (s === "closed") {
+    return {
+      fill: "#E7F6EC",
+      border: "#2F8F5B",
+      text: "#1E603D",
+      heading: "#1E603D"
+    };
+  }
+
+  // Neutral fallback for custom statuses.
+  return {
+    fill: "#F3F4F6",
+    border: "#7A8590",
+    text: "#26323D",
+    heading: "#35424E"
+  };
+}
+
+function trackerBoxHeading(type) {
+  if (type === BOX_DESCRIPTION) return "Description";
+  if (type === BOX_STATUS) return "Status";
+  return "Remark";
+}
+
+function applyTrackerBoxStyle(shape, type, status = "") {
+  const style = getTrackerBoxStyle(type, status);
+
+  shape.fill.setSolidColor(style.fill);
+  shape.lineFormat.color = style.border;
+  shape.lineFormat.weight = 1.5;
+
+  const range = shape.textFrame.textRange;
+  range.font.name = "Aptos";
+  range.font.size = 12;
+  range.font.color = style.text;
+  range.font.bold = false;
+
+  // Make only the heading on the first line bold.
+  // getSubstring is used so the user's body text remains normal weight.
+  const heading = trackerBoxHeading(type);
+  try {
+    const headingRange = range.getSubstring(0, heading.length);
+    headingRange.font.bold = true;
+    headingRange.font.color = style.heading;
+  } catch (e) {
+    // Fallback: keep the whole box readable even if substring formatting
+    // is unavailable on an older host.
+    console.warn("Heading-specific formatting is unavailable.", e);
+  }
+}
+
 function initialText(type, status) {
   if (type === BOX_DESCRIPTION) return "Description\nEnter description here";
   if (type === BOX_STATUS) return `Status\n${status}`;
@@ -199,14 +299,10 @@ async function addBox(type) {
 
     const box = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle, defaultBoxOptions(type));
     box.name = `PIT_${type}_${issueId}`;
-    box.fill.setSolidColor("#FFFFFF");
-    box.lineFormat.color = "#808080";
-    box.lineFormat.weight = 1;
     box.textFrame.wordWrap = true;
     box.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
     box.textFrame.textRange.text = initialText(type, status);
-    box.textFrame.textRange.font.name = "Aptos";
-    box.textFrame.textRange.font.size = 12;
+    applyTrackerBoxStyle(box, type, status);
     box.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
     box.tags.add(TAG_ISSUE_ID, issueId);
     box.tags.add(TAG_BOX_TYPE, type);
@@ -245,6 +341,9 @@ async function resetBoxLayout() {
       shape.height = position.height;
       shape.textFrame.wordWrap = true;
       shape.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+
+      const statusTag = shape.tags.items.find(t => t.key === TAG_STATUS);
+      applyTrackerBoxStyle(shape, typeTag.value, statusTag?.value || "");
       count++;
     }
 
@@ -369,6 +468,9 @@ async function repairCurrentSlide() {
       if (!typeTag) continue;
       shape.tags.add(TAG_APP, "POWERPOINT_ISSUE_TRACKER");
       shape.tags.add(TAG_ISSUE_ID, issueId);
+
+      const statusTag = shape.tags.items.find(t => t.key === TAG_STATUS);
+      applyTrackerBoxStyle(shape, typeTag.value, statusTag?.value || "");
       repaired++;
     }
     await context.sync();
@@ -415,6 +517,7 @@ async function applyStatus() {
 
     statusShape.tags.add(TAG_STATUS, selectedStatus);
     statusShape.textFrame.textRange.text = `Status\n${selectedStatus}`;
+    applyTrackerBoxStyle(statusShape, BOX_STATUS, selectedStatus);
     await context.sync();
   });
 
@@ -439,6 +542,7 @@ async function replaceStatusEverywhere(oldStatus, newStatus) {
         if (typeTag?.value === BOX_STATUS && statusTag?.value === oldStatus) {
           shape.tags.add(TAG_STATUS, newStatus);
           shape.textFrame.textRange.text = `Status\n${newStatus}`;
+          applyTrackerBoxStyle(shape, BOX_STATUS, newStatus);
         }
       }
     }
