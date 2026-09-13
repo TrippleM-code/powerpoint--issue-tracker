@@ -988,13 +988,20 @@ async function createOrRefreshIssueSheet() {
       "ROOM_HALF_DIVIDER"
     );
 
+    // Rotated textboxes must be positioned by their CENTER, not by their
+    // unrotated left edge. Otherwise the textbox rotates out of the narrow strip.
+    const stripCenterX = roomX + (roomW / 2);
+    const rotatedBoxW = Math.max(60, halfH - 34);
+    const rotatedBoxH = 20;
+
+    const areaCenterY = bodyTop + (halfH / 2);
     const areaLabel = markManaged(addText(
       slide,
       issue.areaCode || "Area",
-      roomX + 7,
-      bodyTop + 24,
-      halfH - 48,
-      22,
+      stripCenterX - (rotatedBoxW / 2),
+      areaCenterY - (rotatedBoxH / 2),
+      rotatedBoxW,
+      rotatedBoxH,
       {
         size: 9.5,
         bold: true,
@@ -1003,13 +1010,14 @@ async function createOrRefreshIssueSheet() {
     ), "ROOM_AREA_TEXT");
     areaLabel.rotation = 270;
 
+    const roomCenterY = bodyTop + halfH + (halfH / 2);
     const roomLabel = markManaged(addText(
       slide,
       issue.roomName || "Room / Space",
-      roomX + 7,
-      bodyTop + halfH + 24,
-      halfH - 48,
-      22,
+      stripCenterX - (rotatedBoxW / 2),
+      roomCenterY - (rotatedBoxH / 2),
+      rotatedBoxW,
+      rotatedBoxH,
       {
         size: 9.5,
         bold: true,
