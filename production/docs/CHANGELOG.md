@@ -118,3 +118,27 @@
 - generated dashboard/register slides are moved to the beginning of the presentation
 - dashboard is always slide 1; register pages follow
 - summary-front placement requires PowerPointApi 1.8 and reports a clear compatibility error otherwise
+
+## Production V1 P4.5
+- restored Issue Navigator to the Issue tab
+- navigator accepts typed or pasted Issue IDs
+- navigator suggestions come from all IssueFlow issue slides
+- pressing Enter or clicking Go selects the matching slide
+- navigation is case-insensitive
+- uses supported `presentation.setSelectedSlides([slideId])`
+- P4.4 Issue ID locking, tidied Settings UI and summary-first placement remain unchanged
+
+## Production V1 P4.6
+- fixes PowerPoint 404 caused by the temporary `/p4-5.html` task-pane route
+- new manifest points to the known-good `/index.html` route
+- fresh add-in ID still bypasses the old Office add-in registration cache
+- cache-busting query `?v=p4.6` retained
+- Navigator and all P4.5 features remain unchanged
+
+## Production V1 P4.7
+- fixed task-pane tabs becoming unresponsive
+- stopped reading Office document settings during JavaScript module evaluation
+- presentation settings now load only after Office.onReady
+- tab handlers attach before PowerPoint data reads
+- startup failures now appear in the task-pane banner
+- Navigator, ID locking, global settings apply, and summary-first behavior retained

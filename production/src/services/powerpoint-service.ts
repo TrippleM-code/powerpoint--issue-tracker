@@ -701,6 +701,27 @@ export class PowerPointService {
     });
   }
 
+  async goToIssue(issueId: string): Promise<void> {
+    const targetId = issueId.trim().toLowerCase();
+    if (!targetId) {
+      throw new Error("Enter an Issue ID.");
+    }
+
+    const records = await this.readAllIssues();
+    const match = records.find(
+      (record) => record.issue.id.trim().toLowerCase() === targetId
+    );
+
+    if (!match) {
+      throw new Error(`Issue ID "${issueId.trim()}" was not found.`);
+    }
+
+    await PowerPoint.run(async (context: any) => {
+      context.presentation.setSelectedSlides([match.slideId]);
+      await context.sync();
+    });
+  }
+
   async getSummaryStats(): Promise<SummaryStats> {
     const records = await this.readAllIssues();
     const issues = records.map((record) => record.issue);

@@ -3,6 +3,7 @@ import { normalizeIssueId, validateIssueDraft } from "../domain/validation";
 import { statusCssClass } from "../domain/status";
 import { PowerPointService } from "../services/powerpoint-service";
 import {
+  getDefaultSettings,
   loadSettings,
   saveSettings,
   type IssueFlowSettings,
@@ -40,10 +41,13 @@ type Elements = {
   summaryActionCount: HTMLElement;
   summaryOpenCount: HTMLElement;
   summaryClosedCount: HTMLElement;
+  issueNavigator: HTMLInputElement;
+  issueNavigatorList: HTMLDataListElement;
+  goToIssue: HTMLButtonElement;
 };
 
 let currentIssue: Issue | null = null;
-let settings: IssueFlowSettings = loadSettings();
+let settings: IssueFlowSettings = getDefaultSettings();
 let removeArmedId: string | null = null;
 
 function el<T extends HTMLElement>(id: string): T {
@@ -83,6 +87,9 @@ function elements(): Elements {
     summaryActionCount: el<HTMLElement>("summaryActionCount"),
     summaryOpenCount: el<HTMLElement>("summaryOpenCount"),
     summaryClosedCount: el<HTMLElement>("summaryClosedCount"),
+    issueNavigator: el<HTMLInputElement>("issueNavigator"),
+    issueNavigatorList: el<HTMLDataListElement>("issueNavigatorList"),
+    goToIssue: el<HTMLButtonElement>("goToIssueBtn"),
   };
 }
 
@@ -102,6 +109,7 @@ function setBusy(busy: boolean): void {
   ui.applySettingsAll.disabled = busy;
   ui.refreshSummaryPreview.disabled = busy;
   ui.generateSummary.disabled = busy;
+  ui.goToIssue.disabled = busy;
 }
 
 function formatTimestamp(value?: string): string {
@@ -154,6 +162,7 @@ function populate(issue: Issue | null): void {
   ui.updatedAt.textContent = formatTimestamp(issue?.updatedAt);
 
   renderActionList();
+  void refreshIssueNavigator();
 }
 
 function buildIssueFromForm(): Issue {
@@ -408,6 +417,52 @@ function renderActionList(): void {
     card.append(head, text, buttons);
     ui.actionList.appendChild(card);
   });
+}
+
+
+async function refreshIssueNavigator(): Promise<void> {
+  const ui = elements();
+
+  try {
+    const records = await service.readAllIssues();
+    ui.issueNavigatorList.innerHTML = "";
+
+    records
+      .map((record) => record.issue.id)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .forEach((issueId) => {
+        const option = document.createElement("option");
+        option.value = issueId;
+        ui.issueNavigatorList.appendChild(option);
+      });
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+async function goToIssue(): Promise<void> {
+  const ui = elements();
+  const issueId = ui.issueNavigator.value.trim();
+
+  if (!issueId) {
+    showBanner("Enter an Issue ID to navigate.", "error");
+    return;
+  }
+
+  setBusy(true);
+  try {
+    await service.goToIssue(issueId);
+
+    // Load the issue from the newly selected slide into the Issue tab.
+    const issue = await service.readSelectedIssue();
+    populate(issue);
+
+    showBanner(`Opened ${issueId.toUpperCase()}.`, "success");
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function initializeTabs(): void {
@@ -816,8 +871,13 @@ async function addStatus(): Promise<void> {
 }
 
 export async function initializeIssuePanel(): Promise<void> {
+  // Office.onReady has completed before this function is called.
+  settings = loadSettings();
+
   const ui = elements();
 
+  // Attach tab handlers before any PowerPoint reads so navigation remains usable
+  // even when a later data request fails.
   initializeTabs();
   refreshActionChoices();
   renderSettings();
@@ -831,8 +891,16 @@ export async function initializeIssuePanel(): Promise<void> {
   ui.applySettingsAll.addEventListener("click", applySettingsToAllSlides);
   ui.refreshSummaryPreview.addEventListener("click", refreshSummaryPreview);
   ui.generateSummary.addEventListener("click", generateSummary);
+  ui.goToIssue.addEventListener("click", goToIssue);
+  ui.issueNavigator.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void goToIssue();
+    }
+  });
 
   void refreshSummaryPreview();
+  void refreshIssueNavigator();
 
   try {
     const issue = await service.readSelectedIssue();

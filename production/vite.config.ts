@@ -9,6 +9,7 @@ export default defineConfig({
         p42: resolve(__dirname, "p4-2.html"),
         p43: resolve(__dirname, "p4-3.html"),
         p44: resolve(__dirname, "p4-4.html"),
+        p45: resolve(__dirname, "p4-5.html"),
       },
     },
   },

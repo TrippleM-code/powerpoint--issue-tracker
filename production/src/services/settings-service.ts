@@ -68,10 +68,22 @@ function normalizeParties(values: unknown): Party[] {
     : DEFAULT_PARTY_NAMES.map((name, index) => ({ id: slugId(name, index), name }));
 }
 
+export function getDefaultSettings(): IssueFlowSettings {
+  return {
+    parties: normalizeParties(undefined),
+    statuses: [...DEFAULT_STATUSES],
+  };
+}
+
 export function loadSettings(): IssueFlowSettings {
-  const stored = Office.context.document.settings.get(SETTINGS_KEY);
+  const documentSettings = Office?.context?.document?.settings;
+  if (!documentSettings) {
+    return getDefaultSettings();
+  }
+
+  const stored = documentSettings.get(SETTINGS_KEY);
   if (!stored || typeof stored !== "object") {
-    return { parties: normalizeParties(undefined), statuses: [...DEFAULT_STATUSES] };
+    return getDefaultSettings();
   }
   return {
     parties: normalizeParties(stored.parties),

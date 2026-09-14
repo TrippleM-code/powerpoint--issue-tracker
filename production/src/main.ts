@@ -13,5 +13,12 @@ Office.onReady((info: any) => {
     return;
   }
 
-  initializeIssuePanel();
+  initializeIssuePanel().catch((error: unknown) => {
+    const banner = document.getElementById("statusBanner");
+    if (banner) {
+      banner.textContent = error instanceof Error ? error.message : String(error);
+      banner.className = "banner error";
+    }
+    console.error("IssueFlow initialization failed:", error);
+  });
 });

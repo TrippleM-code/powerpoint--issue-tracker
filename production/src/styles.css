@@ -295,3 +295,12 @@ button.compact { padding:10px 14px; white-space:nowrap; }
   color:#42566c;
   cursor:not-allowed;
 }
+
+.navigate-card { margin-top:12px; }
+.navigate-row {
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:8px;
+  align-items:center;
+}
+.navigate-row input { min-width:0; }
