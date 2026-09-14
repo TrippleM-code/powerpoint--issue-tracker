@@ -4,6 +4,7 @@ import { SCHEMA_VERSION, TAGS } from "../storage/tag-names";
 import { loadSettings } from "./settings-service";
 
 declare const PowerPoint: any;
+declare const Office: any;
 
 const TRUE = "TRUE";
 
@@ -761,6 +762,13 @@ export class PowerPointService {
   async generateSummary(): Promise<{ slidesCreated: number; issueCount: number }> {
     const records = await this.readAllIssues();
     const issues = records.map((record) => record.issue);
+    const pages = groupIssuesForRegister(issues, 8);
+
+    if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8")) {
+      throw new Error(
+        "This PowerPoint version cannot move generated summary slides to the front. Update Microsoft 365/PowerPoint and try again."
+      );
+    }
 
     await PowerPoint.run(async (context: any) => {
       const slides = context.presentation.slides;
@@ -779,22 +787,34 @@ export class PowerPointService {
       existingSummaryIds.forEach((id: string) => slides.getItem(id).delete());
       await context.sync();
 
+      const generatedSlides: any[] = [];
+
       const dashboard = await addCleanSummarySlide(context, "DASHBOARD");
       buildDashboardSlide(dashboard, issues);
+      generatedSlides.push(dashboard);
 
-      const pages = groupIssuesForRegister(issues, 8);
       for (let index = 0; index < pages.length; index += 1) {
-        const registerSlide = await addCleanSummarySlide(context, "REGISTER");
         const page = pages[index];
         if (!page) continue;
+
+        const registerSlide = await addCleanSummarySlide(context, "REGISTER");
         buildRegisterSlide(registerSlide, page, index + 1, pages.length);
+        generatedSlides.push(registerSlide);
       }
+
+      await context.sync();
+
+      // Summary must always be the first pages in the presentation.
+      // Dashboard = slide 1, register pages follow in their generated order.
+      generatedSlides.forEach((slide, index) => {
+        slide.moveTo(index);
+      });
 
       await context.sync();
     });
 
     return {
-      slidesCreated: 1 + groupIssuesForRegister(issues, 8).length,
+      slidesCreated: 1 + pages.length,
       issueCount: issues.length,
     };
   }

@@ -143,6 +143,10 @@ function populate(issue: Issue | null): void {
   currentIssue = issue;
 
   ui.issueId.value = issue?.id ?? "";
+  ui.issueId.readOnly = Boolean(issue);
+  ui.issueId.title = issue
+    ? "Issue ID is locked for this slide. Create a new slide for a new Issue ID."
+    : "Enter a new Issue ID for this blank slide.";
   ui.areaCode.value = issue?.areaCode ?? "";
   ui.roomSpace.value = issue?.roomSpace ?? "";
   ui.description.value = issue?.description ?? "";
@@ -165,6 +169,12 @@ function buildIssueFromForm(): Issue {
 
   const errors = validateIssueDraft(draft);
   if (errors.length) throw new Error(errors.join(" "));
+
+  if (currentIssue && currentIssue.id !== draft.id) {
+    throw new Error(
+      `This slide already belongs to ${currentIssue.id}. Create a new blank slide for a new Issue ID.`
+    );
+  }
 
   const contentChanged =
     !currentIssue ||
@@ -633,6 +643,30 @@ function renderPartyLibrary(): void {
     const item = document.createElement("div");
     item.className = "library-item party-library-item";
 
+    const primary = document.createElement("div");
+    primary.className = "party-primary-row";
+
+    const orderControls = document.createElement("div");
+    orderControls.className = "party-order-controls";
+
+    const up = document.createElement("button");
+    up.className = "secondary order-button";
+    up.textContent = "↑";
+    up.title = "Move up";
+    up.setAttribute("aria-label", `Move ${party.name} up`);
+    up.disabled = index === 0;
+    up.addEventListener("click", () => void moveParty(index, -1));
+
+    const down = document.createElement("button");
+    down.className = "secondary order-button";
+    down.textContent = "↓";
+    down.title = "Move down";
+    down.setAttribute("aria-label", `Move ${party.name} down`);
+    down.disabled = index === settings.parties.length - 1;
+    down.addEventListener("click", () => void moveParty(index, 1));
+
+    orderControls.append(up, down);
+
     const preview = document.createElement("div");
     preview.className = "party-logo-preview";
 
@@ -646,31 +680,13 @@ function renderPartyLibrary(): void {
     }
 
     const name = document.createElement("span");
-    name.className = "library-name";
+    name.className = "library-name party-name";
     name.textContent = party.name;
+
+    primary.append(orderControls, preview, name);
 
     const actions = document.createElement("div");
     actions.className = "party-item-actions";
-
-    const orderControls = document.createElement("div");
-    orderControls.className = "party-order-controls";
-
-    const up = document.createElement("button");
-    up.className = "secondary";
-    up.textContent = "↑";
-    up.title = "Move up";
-    up.disabled = index === 0;
-    up.addEventListener("click", () => void moveParty(index, -1));
-
-    const down = document.createElement("button");
-    down.className = "secondary";
-    down.textContent = "↓";
-    down.title = "Move down";
-    down.disabled = index === settings.parties.length - 1;
-    down.addEventListener("click", () => void moveParty(index, 1));
-
-    orderControls.append(up, down);
-    actions.appendChild(orderControls);
 
     const upload = document.createElement("button");
     upload.className = "secondary";
@@ -696,15 +712,20 @@ function renderPartyLibrary(): void {
       removeLogo.textContent = "Remove Logo";
       removeLogo.addEventListener("click", () => void removePartyLogo(party.id));
       actions.appendChild(removeLogo);
+    } else {
+      const spacer = document.createElement("span");
+      spacer.className = "party-action-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      actions.appendChild(spacer);
     }
 
     const remove = document.createElement("button");
-    remove.className = "library-remove";
+    remove.className = "library-remove remove-party-button";
     remove.textContent = "Remove Party";
     remove.addEventListener("click", () => void removeParty(party));
     actions.appendChild(remove);
 
-    item.append(preview, name, actions);
+    item.append(primary, actions);
     ui.partyLibraryList.appendChild(item);
   });
 }

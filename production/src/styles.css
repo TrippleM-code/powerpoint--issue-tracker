@@ -225,3 +225,73 @@ button.compact { padding:10px 14px; white-space:nowrap; }
   font-size:18px;
   color:#17344d;
 }
+
+/* P4.4 - compact, consistent Party Library cards */
+.party-library-item {
+  display:block;
+  padding:10px;
+}
+
+.party-primary-row {
+  display:grid;
+  grid-template-columns:auto 46px minmax(0, 1fr);
+  gap:9px;
+  align-items:center;
+}
+
+.party-order-controls {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:4px;
+}
+
+.party-order-controls .order-button {
+  width:30px;
+  min-width:30px;
+  height:30px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+}
+
+.party-logo-preview {
+  width:46px;
+  height:38px;
+}
+
+.party-name {
+  font-size:12px;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+
+.party-item-actions {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  margin-top:8px;
+}
+
+.party-item-actions > button {
+  width:100%;
+  min-width:0;
+  padding:7px 8px;
+  font-size:10px;
+  white-space:nowrap;
+}
+
+.party-item-actions .remove-party-button {
+  grid-column:1 / -1;
+}
+
+.party-action-spacer {
+  display:block;
+}
+
+#issueId[readonly] {
+  background:#f3f6f9;
+  color:#42566c;
+  cursor:not-allowed;
+}

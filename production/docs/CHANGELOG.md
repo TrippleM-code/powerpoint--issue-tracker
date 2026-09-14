@@ -107,3 +107,14 @@
 - source-only strict TypeScript check passes locally
 - retains P4 global settings apply, party reorder, dashboard/register and safe refresh
 - uses a unique `/p4-3.html` dev entry and fresh add-in ID
+
+## Production V1 P4.4
+- tidied Party Library cards for narrow PowerPoint task panes
+- Up / Down controls are grouped consistently beside each party
+- one Issue ID is now locked to each IssueFlow issue slide
+- changing the Issue ID on an existing issue slide is blocked
+- same Issue ID can still be edited/refreshed normally
+- a new Issue ID requires a new blank slide
+- generated dashboard/register slides are moved to the beginning of the presentation
+- dashboard is always slide 1; register pages follow
+- summary-front placement requires PowerPointApi 1.8 and reports a clear compatibility error otherwise
