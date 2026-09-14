@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="TaskPaneApp">
+  <Id>7c73d6fa-1a57-4a6f-9d1f-4b8b64fd0c42</Id>
+  <Version>1.0.0.2</Version>
+  <ProviderName>Daily Painkiller</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="IssueFlow Production Dev P4.2"/>
+  <Description DefaultValue="Structured PowerPoint issue and action management."/>
+  <SupportUrl DefaultValue="https://dailypainkiller.com/"/>
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://powerpoint-issue-tracker.vercel.app/p4-2.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

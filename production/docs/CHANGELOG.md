@@ -92,3 +92,18 @@
 - retained long immutable caching for hashed Vite assets
 - production dev manifest now uses `?v=p4.1` cache-busting query
 - prevents PowerPoint task pane from remaining on an older deployed UI after Vercel updates
+
+## Production V1 P4.2
+- added a unique task-pane entry URL: `/p4-2.html`
+- added a new development add-in ID to bypass Office add-in manifest/webview cache
+- added Vite multi-page build so `p4-2.html` is deployed explicitly
+- added stronger no-cache headers for all HTML entry points
+- P4 functionality is unchanged
+
+## Production V1 P4.3
+- fixed strict TypeScript `number | undefined` errors in Action Register column widths
+- guarded paginated register page access
+- fixed strict Party reorder array-index errors
+- source-only strict TypeScript check passes locally
+- retains P4 global settings apply, party reorder, dashboard/register and safe refresh
+- uses a unique `/p4-3.html` dev entry and fresh add-in ID

@@ -557,7 +557,13 @@ async function moveParty(index: number, direction: -1 | 1): Promise<void> {
   if (target < 0 || target >= settings.parties.length) return;
 
   const reordered = [...settings.parties];
-  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+  const currentParty = reordered[index];
+  const targetParty = reordered[target];
+
+  if (!currentParty || !targetParty) return;
+
+  reordered[index] = targetParty;
+  reordered[target] = currentParty;
   settings = { ...settings, parties: reordered };
 
   try {

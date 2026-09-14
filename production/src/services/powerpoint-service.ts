@@ -267,17 +267,25 @@ function buildRegisterSlide(
   const top = 82;
   const headH = 30;
   const rowH = 48;
-  const widths = [90, 110, 210, 104, 282, 125];
+  const widths = [90, 110, 210, 104, 282, 125] as const;
   const headers = ["Issue ID", "Area / Room", "Description", "Action By", "Action Required", "Status"];
 
   let x = left;
   headers.forEach((header, index) => {
-    addFilledRect(slide, x, top, widths[index], headH, NAVY, NAVY);
-    addText(slide, header, x + 7, top + 8, widths[index] - 14, 14, {
+    const width = widths[index] ?? 0;
+    addFilledRect(slide, x, top, width, headH, NAVY, NAVY);
+    addText(slide, header, x + 7, top + 8, width - 14, 14, {
       size: 7.8, bold: true, color: "#FFFFFF"
     });
-    x += widths[index];
+    x += width;
   });
+
+  const issueW = widths[0];
+  const areaW = widths[1];
+  const descW = widths[2];
+  const partyW = widths[3];
+  const actionW = widths[4];
+  const statusW = widths[5];
 
   let rowIndex = 0;
 
@@ -293,45 +301,45 @@ function buildRegisterSlide(
     const baseFill = rowIndex % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
 
     let colX = left;
-    addFilledRect(slide, colX, groupTop, widths[0], groupHeight, baseFill, GRID);
-    addText(slide, issue.id, colX + 7, groupTop + 8, widths[0] - 14, Math.max(18, groupHeight - 12), {
+    addFilledRect(slide, colX, groupTop, issueW, groupHeight, baseFill, GRID);
+    addText(slide, issue.id, colX + 7, groupTop + 8, issueW - 14, Math.max(18, groupHeight - 12), {
       size: 8.4, bold: true, color: "#1769AA"
     });
-    colX += widths[0];
+    colX += issueW;
 
-    addFilledRect(slide, colX, groupTop, widths[1], groupHeight, baseFill, GRID);
+    addFilledRect(slide, colX, groupTop, areaW, groupHeight, baseFill, GRID);
     addText(
       slide,
       [issue.areaCode, issue.roomSpace].filter(Boolean).join("\n") || "—",
-      colX + 7, groupTop + 7, widths[1] - 14, Math.max(18, groupHeight - 12),
+      colX + 7, groupTop + 7, areaW - 14, Math.max(18, groupHeight - 12),
       { size: 7.5, color: TEXT }
     );
-    colX += widths[1];
+    colX += areaW;
 
-    addFilledRect(slide, colX, groupTop, widths[2], groupHeight, baseFill, GRID);
-    addText(slide, issue.description || "—", colX + 7, groupTop + 7, widths[2] - 14, Math.max(18, groupHeight - 12), {
+    addFilledRect(slide, colX, groupTop, descW, groupHeight, baseFill, GRID);
+    addText(slide, issue.description || "—", colX + 7, groupTop + 7, descW - 14, Math.max(18, groupHeight - 12), {
       size: 7.5, color: TEXT
     });
-    colX += widths[2];
+    colX += descW;
 
     visible.forEach((action, localIndex) => {
       const rowTop = groupTop + localIndex * rowH;
 
-      addFilledRect(slide, colX, rowTop, widths[3], rowH, "#FFFFFF", GRID);
-      addText(slide, action.party, colX + 7, rowTop + 7, widths[3] - 14, rowH - 12, {
+      addFilledRect(slide, colX, rowTop, partyW, rowH, "#FFFFFF", GRID);
+      addText(slide, action.party, colX + 7, rowTop + 7, partyW - 14, rowH - 12, {
         size: 7.8, bold: true, color: TEXT
       });
 
-      const actionX = colX + widths[3];
-      addFilledRect(slide, actionX, rowTop, widths[4], rowH, "#FFFFFF", GRID);
-      addText(slide, action.required, actionX + 7, rowTop + 7, widths[4] - 14, rowH - 12, {
+      const actionX = colX + partyW;
+      addFilledRect(slide, actionX, rowTop, actionW, rowH, "#FFFFFF", GRID);
+      addText(slide, action.required, actionX + 7, rowTop + 7, actionW - 14, rowH - 12, {
         size: 7.4, color: TEXT
       });
 
-      const statusX = actionX + widths[4];
+      const statusX = actionX + actionW;
       const colors = statusColors(action.status);
-      addFilledRect(slide, statusX, rowTop, widths[5], rowH, colors.fill, GRID);
-      addText(slide, action.status, statusX + 7, rowTop + 7, widths[5] - 14, rowH - 12, {
+      addFilledRect(slide, statusX, rowTop, statusW, rowH, colors.fill, GRID);
+      addText(slide, action.status, statusX + 7, rowTop + 7, statusW - 14, rowH - 12, {
         size: 7.8, bold: true, color: colors.text
       });
     });
@@ -777,7 +785,9 @@ export class PowerPointService {
       const pages = groupIssuesForRegister(issues, 8);
       for (let index = 0; index < pages.length; index += 1) {
         const registerSlide = await addCleanSummarySlide(context, "REGISTER");
-        buildRegisterSlide(registerSlide, pages[index], index + 1, pages.length);
+        const page = pages[index];
+        if (!page) continue;
+        buildRegisterSlide(registerSlide, page, index + 1, pages.length);
       }
 
       await context.sync();
