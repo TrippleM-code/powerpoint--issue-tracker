@@ -1,7 +1,7 @@
 {
   "name": "issueflow-powerpoint",
   "private": true,
-  "version": "1.0.0-p2.2",
+  "version": "1.0.0-p3",
   "type": "module",
   "scripts": {
     "dev": "vite",

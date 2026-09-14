@@ -1,4 +1,4 @@
-import type { ActionItem, Issue } from "../domain/models";
+import type { ActionItem, Issue, Party } from "../domain/models";
 import { normalizeIssueId, validateIssueDraft } from "../domain/validation";
 import { statusCssClass } from "../domain/status";
 import { PowerPointService } from "../services/powerpoint-service";
@@ -117,7 +117,7 @@ function fillSelect(select: HTMLSelectElement, values: string[], preferred?: str
 
 function refreshActionChoices(preferredParty?: string, preferredStatus?: string): void {
   const ui = elements();
-  fillSelect(ui.actionParty, settings.parties, preferredParty);
+  fillSelect(ui.actionParty, settings.parties.map((party) => party.name), preferredParty);
   fillSelect(ui.actionStatus, settings.statuses, preferredStatus);
 }
 
@@ -439,36 +439,169 @@ async function persistSettings(message: string): Promise<void> {
   showBanner(message, "success");
 }
 
+
+async function compressLogo(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose a supported image file.");
+  }
+
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read the logo file."));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Could not load the logo image."));
+    img.src = dataUrl;
+  });
+
+  const maxW = 260;
+  const maxH = 100;
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not prepare the logo image.");
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL("image/png");
+}
+
+async function updatePartyLogo(partyId: string, file: File): Promise<void> {
+  try {
+    const logoDataUrl = await compressLogo(file);
+    settings = {
+      ...settings,
+      parties: settings.parties.map((party) =>
+        party.id === partyId ? { ...party, logoDataUrl } : party
+      ),
+    };
+    await persistSettings("Party logo saved.");
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+async function removePartyLogo(partyId: string): Promise<void> {
+  settings = {
+    ...settings,
+    parties: settings.parties.map((party) =>
+      party.id === partyId ? { id: party.id, name: party.name } : party
+    ),
+  };
+
+  try {
+    await persistSettings("Party logo removed.");
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+async function removeParty(party: Party): Promise<void> {
+  if (settings.parties.length <= 1) {
+    showBanner("Keep at least one party in the library.", "error");
+    return;
+  }
+
+  const inUse = currentIssue?.actions.some(
+    (action) => action.party.toLowerCase() === party.name.toLowerCase()
+  );
+  if (inUse) {
+    showBanner("This party is used by an existing action. Update that action before removing it.", "error");
+    return;
+  }
+
+  settings = {
+    ...settings,
+    parties: settings.parties.filter((item) => item.id !== party.id),
+  };
+
+  try {
+    await persistSettings("Party removed.");
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+function renderPartyLibrary(): void {
+  const ui = elements();
+  ui.partyLibraryList.innerHTML = "";
+
+  settings.parties.forEach((party) => {
+    const item = document.createElement("div");
+    item.className = "library-item party-library-item";
+
+    const preview = document.createElement("div");
+    preview.className = "party-logo-preview";
+
+    if (party.logoDataUrl) {
+      const img = document.createElement("img");
+      img.alt = `${party.name} logo`;
+      img.src = party.logoDataUrl;
+      preview.appendChild(img);
+    } else {
+      preview.textContent = party.name.slice(0, 3).toUpperCase();
+    }
+
+    const name = document.createElement("span");
+    name.className = "library-name";
+    name.textContent = party.name;
+
+    const actions = document.createElement("div");
+    actions.className = "party-item-actions";
+
+    const upload = document.createElement("button");
+    upload.className = "secondary";
+    upload.textContent = party.logoDataUrl ? "Replace Logo" : "Add Logo";
+
+    const fileInput = document.createElement("input");
+    fileInput.className = "logo-file-input";
+    fileInput.type = "file";
+    fileInput.accept = "image/png,image/jpeg,image/webp";
+
+    upload.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (file) void updatePartyLogo(party.id, file);
+      fileInput.value = "";
+    });
+
+    actions.append(upload, fileInput);
+
+    if (party.logoDataUrl) {
+      const removeLogo = document.createElement("button");
+      removeLogo.className = "secondary";
+      removeLogo.textContent = "Remove Logo";
+      removeLogo.addEventListener("click", () => void removePartyLogo(party.id));
+      actions.appendChild(removeLogo);
+    }
+
+    const remove = document.createElement("button");
+    remove.className = "library-remove";
+    remove.textContent = "Remove Party";
+    remove.addEventListener("click", () => void removeParty(party));
+    actions.appendChild(remove);
+
+    item.append(preview, name, actions);
+    ui.partyLibraryList.appendChild(item);
+  });
+}
+
 function renderSettings(): void {
   const ui = elements();
 
-  renderLibraryList(ui.partyLibraryList, settings.parties, async (value) => {
-    if (settings.parties.length <= 1) {
-      showBanner("Keep at least one party in the library.", "error");
-      return;
-    }
-
-    const inUse = currentIssue?.actions.some(
-      (action) => action.party.toLowerCase() === value.toLowerCase()
-    );
-    if (inUse) {
-      showBanner("This party is used by an existing action. Update that action before removing it.", "error");
-      return;
-    }
-
-    settings = {
-      ...settings,
-      parties: settings.parties.filter(
-        (party) => party.toLowerCase() !== value.toLowerCase()
-      ),
-    };
-
-    try {
-      await persistSettings("Party removed.");
-    } catch (error) {
-      showBanner(error instanceof Error ? error.message : String(error), "error");
-    }
-  });
+  renderPartyLibrary();
 
   renderLibraryList(ui.statusLibraryList, settings.statuses, async (value) => {
     if (settings.statuses.length <= 1) {
@@ -508,12 +641,15 @@ async function addParty(): Promise<void> {
     return;
   }
 
-  if (settings.parties.some((party) => party.toLowerCase() === value.toLowerCase())) {
+  if (settings.parties.some((party) => party.name.toLowerCase() === value.toLowerCase())) {
     showBanner("That party already exists.", "error");
     return;
   }
 
-  settings = { ...settings, parties: [...settings.parties, value] };
+  settings = {
+    ...settings,
+    parties: [...settings.parties, { id: `party-${Date.now().toString(36)}`, name: value }],
+  };
 
   try {
     await persistSettings("Party added.");

@@ -1,6 +1,7 @@
 import type { Issue } from "../domain/models";
 import { computeOverallStatus } from "../domain/status";
 import { SCHEMA_VERSION, TAGS } from "../storage/tag-names";
+import { loadSettings } from "./settings-service";
 
 declare const PowerPoint: any;
 
@@ -117,6 +118,8 @@ export class PowerPointService {
   }
 
   async renderSelectedIssue(issue: Issue): Promise<void> {
+    const presentationSettings = loadSettings();
+
     await PowerPoint.run(async (context: any) => {
       const slide = await getSelectedSlide(context);
       const shapes = await loadShapeTags(context, slide);
@@ -162,10 +165,47 @@ export class PowerPointService {
       const actionsX = refX + refW + gap;
       const actionsW = pageRight - actionsX;
 
+      // Production P3 party header: one equal-width cell per configured party.
+      const partyHeaderTop = 18;
+      const partyHeaderH = 42;
+      const identityX = pageRight - 300;
+      const partyHeaderX = pageLeft;
+      const partyHeaderW = identityX - pageLeft - 8;
+      const parties = presentationSettings.parties;
+      const partyCellW = partyHeaderW / Math.max(parties.length, 1);
+
+      parties.forEach((party, index) => {
+        const cellX = partyHeaderX + index * partyCellW;
+
+        const cell = addFilledRect(
+          slide, cellX, partyHeaderTop, partyCellW, partyHeaderH, "#FFFFFF", "#D5DFE9"
+        );
+        addManagedTag(cell, `PARTY_${index}_CELL`);
+
+        if (party.logoDataUrl) {
+          const logoBox = slide.shapes.addGeometricShape("Rectangle", {
+            left: cellX + 6,
+            top: partyHeaderTop + 5,
+            width: Math.max(10, partyCellW - 12),
+            height: partyHeaderH - 10,
+          });
+          logoBox.lineFormat.transparency = 1.0;
+          logoBox.fill.setImage(party.logoDataUrl);
+          addManagedTag(logoBox, `PARTY_${index}_LOGO`);
+        } else {
+          const name = addText(
+            slide, party.name,
+            cellX + 5, partyHeaderTop + 8,
+            Math.max(10, partyCellW - 10), partyHeaderH - 16,
+            { size: 8, bold: true, color: TEXT }
+          );
+          addManagedTag(name, `PARTY_${index}_NAME`);
+        }
+      });
+
       // Production P2.1 issue identity header.
       const identityTop = 18;
       const identityH = 42;
-      const identityX = pageRight - 300;
       const identityW = 292;
 
       const identityBox = addFilledRect(

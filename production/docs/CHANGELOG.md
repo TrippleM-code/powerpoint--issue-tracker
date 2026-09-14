@@ -55,3 +55,11 @@
 - seeded party library: Architect, C&S, MEP, Main Contractor, ESCS
 - protected settings entries that are already used by actions from accidental removal
 - retained P2.1 slide-boundary fix and safe refresh behavior
+
+## Production V1 P3
+- Party Library supports Add Logo, Replace Logo, and Remove Logo
+- P2.2 string party settings migrate automatically to structured Party objects
+- logos are resized/compressed before storage
+- slide header renders equal-width cells for all configured parties
+- logo shown when available; party name shown as fallback
+- Issue ID / Created / Updated block remains on the right
