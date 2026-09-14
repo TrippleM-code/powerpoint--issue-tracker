@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IssueFlow</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <div class="eyebrow">IssueFlow</div>
+        <h1>PowerPoint Issue Manager</h1>
+      </div>
+      <span id="appVersion" class="version">Production V1 · P4.6</span>
+    </header>
+
+    <nav class="tabs" aria-label="IssueFlow sections">
+      <button class="tab-button active" data-tab="issue" aria-selected="true">Issue</button>
+      <button class="tab-button" data-tab="actions" aria-selected="false">Actions</button>
+      <button class="tab-button" data-tab="summary" aria-selected="false">Summary</button>
+      <button class="tab-button" data-tab="settings" aria-selected="false">Settings</button>
+    </nav>
+
+    <section id="statusBanner" class="banner hidden" role="status" aria-live="polite"></section>
+
+    <section id="tab-issue" class="tab-panel active">
+      <section class="card">
+        <div class="section-title">Issue</div>
+
+        <label for="issueId">Issue ID</label>
+        <input id="issueId" autocomplete="off" placeholder="e.g. MEP-001" />
+
+        <label for="areaCode">Area Code</label>
+        <input id="areaCode" autocomplete="off" placeholder="e.g. BASEMENT" />
+
+        <label for="roomSpace">Room / Space</label>
+        <input id="roomSpace" autocomplete="off" placeholder="e.g. TX Room Corridor" />
+
+        <label for="description">Description</label>
+        <textarea id="description" rows="5" placeholder="Describe the coordination issue"></textarea>
+
+        <div class="button-stack">
+          <button id="saveIssueBtn" class="secondary">Save Issue Data</button>
+          <button id="refreshSheetBtn" class="primary">Create / Refresh Sheet</button>
+        </div>
+
+        <p class="hint">
+          Reference Images remain manual in PowerPoint. IssueFlow does not delete or recreate your pasted images,
+          arrows, text boxes, or annotations.
+        </p>
+      </section>
+
+      <section class="stats-card" aria-label="Issue metadata">
+        <div><span>Created</span><strong id="createdAt">—</strong></div>
+        <div><span>Updated</span><strong id="updatedAt">—</strong></div>
+      </section>
+    </section>
+
+    <section id="tab-actions" class="tab-panel">
+      <section class="card">
+        <div class="section-title">Actions</div>
+
+        <input id="editingActionId" type="hidden" />
+
+        <label for="actionParty">Action By / Responsible Party</label>
+        <select id="actionParty"></select>
+
+        <label for="actionRequired">Action Required</label>
+        <textarea id="actionRequired" rows="3" placeholder="Describe the required action"></textarea>
+
+        <label for="actionStatus">Status</label>
+        <select id="actionStatus"></select>
+
+        <div class="button-row">
+          <button id="saveActionBtn" class="primary">Add Action</button>
+          <button id="cancelEditActionBtn" class="secondary hidden">Cancel Edit</button>
+        </div>
+
+        <div id="actionList" class="action-list" aria-live="polite"></div>
+      </section>
+    </section>
+
+
+    <section id="tab-summary" class="tab-panel">
+      <section class="card">
+        <div class="section-title">Summary & Register</div>
+        <p class="hint">
+          Creates a dashboard followed by a paginated action register from all IssueFlow issue slides.
+        </p>
+
+        <div class="summary-kpis">
+          <div><span>Issues</span><strong id="summaryIssueCount">—</strong></div>
+          <div><span>Actions</span><strong id="summaryActionCount">—</strong></div>
+          <div><span>Open</span><strong id="summaryOpenCount">—</strong></div>
+          <div><span>Closed</span><strong id="summaryClosedCount">—</strong></div>
+        </div>
+
+        <div class="button-stack">
+          <button id="refreshSummaryPreviewBtn" class="secondary">Refresh Preview</button>
+          <button id="generateSummaryBtn" class="primary">Generate / Refresh Summary</button>
+        </div>
+
+        <p class="hint">
+          Existing IssueFlow summary slides are replaced. Issue slides and manual reference content are not changed.
+        </p>
+      </section>
+    </section>
+
+    <section id="tab-settings" class="tab-panel">
+      <section class="card">
+        <div class="section-title">Settings</div>
+
+        <div class="settings-group first">
+          <div class="settings-heading">Party Library</div>
+          <p class="hint settings-hint">
+            Only parties defined here can be selected in Action By. You can also attach a logo to each party for the slide header.
+          </p>
+
+          <div class="settings-add-row">
+            <input id="newPartyName" autocomplete="off" placeholder="e.g. Fire Protection" />
+            <button id="addPartyBtn" class="secondary compact">Add</button>
+          </div>
+
+          <div id="partyLibraryList" class="library-list"></div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-heading">Status Library</div>
+          <p class="hint settings-hint">
+            Only statuses defined here can be selected for an action.
+          </p>
+
+          <div class="settings-add-row">
+            <input id="newStatusName" autocomplete="off" placeholder="e.g. WIP" />
+            <button id="addStatusBtn" class="secondary compact">Add</button>
+          </div>
+
+          <div id="statusLibraryList" class="library-list"></div>
+        </div>
+
+        <div class="settings-note">
+          These libraries are stored with the PowerPoint document so the same choices are available to everyone using this file.
+        </div>
+
+        <div class="settings-apply">
+          <button id="applySettingsAllBtn" class="primary">Apply Settings to All Issue Slides</button>
+          <p class="hint">
+            Rebuilds IssueFlow-managed header and layout on every issue slide while preserving manual reference images, text and annotations.
+          </p>
+        </div>
+
+        <div class="about-block">
+          <strong>IssueFlow Production V1</strong>
+          <span>Build P4.6</span>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
