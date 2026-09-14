@@ -69,7 +69,7 @@ select:focus { outline:2px solid #7db7e8; outline-offset:1px; }
 
 .tabs {
   display:grid;
-  grid-template-columns:repeat(3, 1fr);
+  grid-template-columns:repeat(4, 1fr);
   gap:6px;
   margin-bottom:12px;
   background:#eaf0f6;
@@ -181,3 +181,47 @@ button.compact { padding:10px 14px; white-space:nowrap; }
   font-size:10px;
 }
 .logo-file-input { display:none; }
+
+.party-order-controls {
+  display:flex;
+  gap:4px;
+}
+.party-order-controls button {
+  width:28px;
+  min-width:28px;
+  padding:6px 0;
+}
+.party-order-controls button:disabled {
+  opacity:.35;
+  cursor:not-allowed;
+}
+.settings-apply {
+  margin-top:16px;
+  padding-top:14px;
+  border-top:1px solid #e4ebf2;
+}
+.settings-apply button { width:100%; }
+.summary-kpis {
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:8px;
+  margin:14px 0;
+}
+.summary-kpis > div {
+  border:1px solid #dbe4ef;
+  border-radius:10px;
+  background:#fbfcfe;
+  padding:10px;
+}
+.summary-kpis span {
+  display:block;
+  font-size:10px;
+  text-transform:uppercase;
+  color:#74869a;
+}
+.summary-kpis strong {
+  display:block;
+  margin-top:3px;
+  font-size:18px;
+  color:#17344d;
+}

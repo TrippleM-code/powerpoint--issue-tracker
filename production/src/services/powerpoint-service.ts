@@ -101,6 +101,245 @@ function addThinRect(
   return shape;
 }
 
+
+export interface IssueSlideRecord {
+  slideId: string;
+  issue: Issue;
+}
+
+export interface ApplyAllResult {
+  updated: number;
+  failed: number;
+  errors: string[];
+}
+
+export interface SummaryStats {
+  issueCount: number;
+  actionCount: number;
+  openCount: number;
+  closedCount: number;
+}
+
+function statusColors(status: string): { fill: string; text: string } {
+  switch (status.trim().toLowerCase()) {
+    case "open": return { fill: "#FDE8E8", text: "#9F1D1D" };
+    case "in progress": return { fill: "#E5F0FB", text: "#185A8B" };
+    case "pending": return { fill: "#FFF2D8", text: "#8A5A00" };
+    case "closed": return { fill: "#E6F5EA", text: "#27663A" };
+    default: return { fill: "#EEF1F5", text: "#46586B" };
+  }
+}
+
+async function addCleanSummarySlide(context: any, type: string): Promise<any> {
+  const slides = context.presentation.slides;
+  const count = slides.getCount();
+  await context.sync();
+
+  slides.add();
+  await context.sync();
+
+  const slide = slides.getItemAt(count.value);
+  slide.shapes.load("items/id");
+  await context.sync();
+
+  for (const shape of slide.shapes.items) {
+    shape.delete();
+  }
+  await context.sync();
+
+  slide.tags.add(TAGS.summary, TRUE);
+  slide.tags.add(TAGS.summaryType, type);
+  slide.tags.add(TAGS.app, TRUE);
+  return slide;
+}
+
+function buildDashboardSlide(slide: any, issues: Issue[]): void {
+  const NAVY = "#17344D";
+  const GRID = "#D7E1EB";
+  const TEXT = "#172538";
+  const allActions = issues.flatMap((issue) => issue.actions);
+  const openCount = issues.filter(
+    (issue) => computeOverallStatus(issue.actions.map((action) => action.status)) !== "Closed"
+  ).length;
+  const closedCount = issues.length - openCount;
+
+  addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
+  addText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, { size: 21, bold: true, color: "#FFFFFF" });
+  addText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
+    size: 8, color: "#DCE7EF"
+  });
+
+  const cards: Array<[string, number]> = [
+    ["Issues", issues.length],
+    ["Open issues", openCount],
+    ["Closed issues", closedCount],
+    ["Actions", allActions.length],
+  ];
+  cards.forEach(([label, value], index) => {
+    const left = 38 + index * 222;
+    addFilledRect(slide, left, 86, 198, 72, "#FFFFFF", GRID);
+    addText(slide, String(value), left + 18, 98, 155, 24, { size: 21, bold: true, color: TEXT });
+    addText(slide, label, left + 18, 132, 155, 14, { size: 8.5, color: "#68798A" });
+  });
+
+  const statusCounts = new Map<string, number>();
+  allActions.forEach((action) => {
+    statusCounts.set(action.status, (statusCounts.get(action.status) || 0) + 1);
+  });
+
+  addText(slide, "Actions by status", 42, 196, 250, 20, { size: 14, bold: true, color: TEXT });
+  const max = Math.max(1, ...Array.from(statusCounts.values()));
+  Array.from(statusCounts.entries()).slice(0, 7).forEach(([status, count], index) => {
+    const top = 235 + index * 38;
+    const colors = statusColors(status);
+    addText(slide, status, 48, top, 130, 16, { size: 9, color: TEXT });
+    addFilledRect(slide, 178, top + 1, 480, 14, "#EEF2F6", "#EEF2F6");
+    addFilledRect(slide, 178, top + 1, Math.max(6, 480 * count / max), 14, colors.fill, colors.fill);
+    addText(slide, String(count), 674, top, 40, 16, { size: 9, bold: true, color: colors.text });
+  });
+
+  const partyCounts = new Map<string, number>();
+  allActions.forEach((action) => {
+    partyCounts.set(action.party, (partyCounts.get(action.party) || 0) + 1);
+  });
+
+  addText(slide, "Actions by party", 744, 196, 170, 20, { size: 14, bold: true, color: TEXT });
+  Array.from(partyCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .forEach(([party, count], index) => {
+      addText(slide, party, 746, 235 + index * 31, 145, 15, { size: 8.5, color: TEXT });
+      addText(slide, String(count), 896, 235 + index * 31, 28, 15, { size: 8.5, bold: true, color: "#2677B7" });
+    });
+}
+
+type RegisterGroup = { issue: Issue; start: number; count: number };
+
+function groupIssuesForRegister(issues: Issue[], maxRows = 8): RegisterGroup[][] {
+  const pages: RegisterGroup[][] = [];
+  let page: RegisterGroup[] = [];
+  let used = 0;
+
+  for (const issue of issues) {
+    const rows = Math.max(1, issue.actions.length);
+    let start = 0;
+
+    while (start < rows) {
+      if (used >= maxRows) {
+        pages.push(page);
+        page = [];
+        used = 0;
+      }
+
+      const available = maxRows - used;
+      const count = Math.min(available, rows - start);
+      page.push({ issue, start, count });
+      used += count;
+      start += count;
+
+      if (used >= maxRows) {
+        pages.push(page);
+        page = [];
+        used = 0;
+      }
+    }
+  }
+
+  if (page.length) pages.push(page);
+  return pages.length ? pages : [[]];
+}
+
+function buildRegisterSlide(
+  slide: any,
+  groups: RegisterGroup[],
+  pageNo: number,
+  pageCount: number
+): void {
+  const NAVY = "#17344D";
+  const GRID = "#D7E1EB";
+  const TEXT = "#172538";
+
+  addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
+  addText(slide, "ACTION REGISTER", 34, 15, 430, 24, { size: 21, bold: true, color: "#FFFFFF" });
+  addText(slide, `Page ${pageNo} of ${pageCount}`, 805, 19, 115, 16, { size: 8.5, color: "#DCE7EF" });
+
+  const left = 18;
+  const top = 82;
+  const headH = 30;
+  const rowH = 48;
+  const widths = [90, 110, 210, 104, 282, 125];
+  const headers = ["Issue ID", "Area / Room", "Description", "Action By", "Action Required", "Status"];
+
+  let x = left;
+  headers.forEach((header, index) => {
+    addFilledRect(slide, x, top, widths[index], headH, NAVY, NAVY);
+    addText(slide, header, x + 7, top + 8, widths[index] - 14, 14, {
+      size: 7.8, bold: true, color: "#FFFFFF"
+    });
+    x += widths[index];
+  });
+
+  let rowIndex = 0;
+
+  groups.forEach((group) => {
+    const issue = group.issue;
+    const actions = issue.actions.length
+      ? issue.actions
+      : [{ id: "none", party: "—", required: "No actions", status: "—", createdAt: issue.createdAt }];
+
+    const visible = actions.slice(group.start, group.start + group.count);
+    const groupTop = top + headH + rowIndex * rowH;
+    const groupHeight = visible.length * rowH;
+    const baseFill = rowIndex % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
+
+    let colX = left;
+    addFilledRect(slide, colX, groupTop, widths[0], groupHeight, baseFill, GRID);
+    addText(slide, issue.id, colX + 7, groupTop + 8, widths[0] - 14, Math.max(18, groupHeight - 12), {
+      size: 8.4, bold: true, color: "#1769AA"
+    });
+    colX += widths[0];
+
+    addFilledRect(slide, colX, groupTop, widths[1], groupHeight, baseFill, GRID);
+    addText(
+      slide,
+      [issue.areaCode, issue.roomSpace].filter(Boolean).join("\n") || "—",
+      colX + 7, groupTop + 7, widths[1] - 14, Math.max(18, groupHeight - 12),
+      { size: 7.5, color: TEXT }
+    );
+    colX += widths[1];
+
+    addFilledRect(slide, colX, groupTop, widths[2], groupHeight, baseFill, GRID);
+    addText(slide, issue.description || "—", colX + 7, groupTop + 7, widths[2] - 14, Math.max(18, groupHeight - 12), {
+      size: 7.5, color: TEXT
+    });
+    colX += widths[2];
+
+    visible.forEach((action, localIndex) => {
+      const rowTop = groupTop + localIndex * rowH;
+
+      addFilledRect(slide, colX, rowTop, widths[3], rowH, "#FFFFFF", GRID);
+      addText(slide, action.party, colX + 7, rowTop + 7, widths[3] - 14, rowH - 12, {
+        size: 7.8, bold: true, color: TEXT
+      });
+
+      const actionX = colX + widths[3];
+      addFilledRect(slide, actionX, rowTop, widths[4], rowH, "#FFFFFF", GRID);
+      addText(slide, action.required, actionX + 7, rowTop + 7, widths[4] - 14, rowH - 12, {
+        size: 7.4, color: TEXT
+      });
+
+      const statusX = actionX + widths[4];
+      const colors = statusColors(action.status);
+      addFilledRect(slide, statusX, rowTop, widths[5], rowH, colors.fill, GRID);
+      addText(slide, action.status, statusX + 7, rowTop + 7, widths[5] - 14, rowH - 12, {
+        size: 7.8, bold: true, color: colors.text
+      });
+    });
+
+    rowIndex += visible.length;
+  });
+}
+
 export class PowerPointService {
   async readSelectedIssue(): Promise<Issue | null> {
     return PowerPoint.run(async (context: any) => {
@@ -418,4 +657,136 @@ export class PowerPointService {
       await context.sync();
     });
   }
+
+  async readAllIssues(): Promise<IssueSlideRecord[]> {
+    return PowerPoint.run(async (context: any) => {
+      const slides = context.presentation.slides;
+      slides.load("items/id");
+      await context.sync();
+
+      for (const slide of slides.items) {
+        slide.tags.load("items/key,value");
+      }
+      await context.sync();
+
+      const records: IssueSlideRecord[] = [];
+
+      for (const slide of slides.items) {
+        const isSummary = readTag(slide.tags.items, TAGS.summary) === TRUE;
+        if (isSummary) continue;
+
+        const json = readTag(slide.tags.items, TAGS.issueJson);
+        if (!json) continue;
+
+        try {
+          const issue = JSON.parse(json) as Issue;
+          if (issue && issue.id) {
+            records.push({ slideId: slide.id, issue });
+          }
+        } catch {
+          // Skip invalid issue metadata; the current-slide workflow reports it directly.
+        }
+      }
+
+      return records;
+    });
+  }
+
+  async getSummaryStats(): Promise<SummaryStats> {
+    const records = await this.readAllIssues();
+    const issues = records.map((record) => record.issue);
+    const actionCount = issues.reduce((sum, issue) => sum + issue.actions.length, 0);
+    const closedCount = issues.filter(
+      (issue) => computeOverallStatus(issue.actions.map((action) => action.status)) === "Closed"
+    ).length;
+
+    return {
+      issueCount: issues.length,
+      actionCount,
+      openCount: issues.length - closedCount,
+      closedCount,
+    };
+  }
+
+  async applySettingsToAllIssueSlides(): Promise<ApplyAllResult> {
+    const originalSlideId = await PowerPoint.run(async (context: any) => {
+      const selected = context.presentation.getSelectedSlides();
+      selected.load("items/id");
+      await context.sync();
+      return selected.items[0]?.id || "";
+    });
+
+    const records = await this.readAllIssues();
+    const result: ApplyAllResult = { updated: 0, failed: 0, errors: [] };
+
+    for (const record of records) {
+      try {
+        await PowerPoint.run(async (context: any) => {
+          context.presentation.setSelectedSlides([record.slideId]);
+          await context.sync();
+        });
+
+        await this.renderSelectedIssue(record.issue);
+        result.updated += 1;
+      } catch (error) {
+        result.failed += 1;
+        result.errors.push(
+          `${record.issue.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+
+    if (originalSlideId) {
+      try {
+        await PowerPoint.run(async (context: any) => {
+          context.presentation.setSelectedSlides([originalSlideId]);
+          await context.sync();
+        });
+      } catch {
+        // Non-fatal: applying settings already completed.
+      }
+    }
+
+    return result;
+  }
+
+  async generateSummary(): Promise<{ slidesCreated: number; issueCount: number }> {
+    const records = await this.readAllIssues();
+    const issues = records.map((record) => record.issue);
+
+    await PowerPoint.run(async (context: any) => {
+      const slides = context.presentation.slides;
+      slides.load("items/id");
+      await context.sync();
+
+      for (const slide of slides.items) {
+        slide.tags.load("items/key,value");
+      }
+      await context.sync();
+
+      const existingSummaryIds = slides.items
+        .filter((slide: any) => readTag(slide.tags.items, TAGS.summary) === TRUE)
+        .map((slide: any) => slide.id);
+
+      existingSummaryIds.forEach((id: string) => slides.getItem(id).delete());
+      await context.sync();
+
+      const dashboard = await addCleanSummarySlide(context, "DASHBOARD");
+      buildDashboardSlide(dashboard, issues);
+
+      const pages = groupIssuesForRegister(issues, 8);
+      for (let index = 0; index < pages.length; index += 1) {
+        const registerSlide = await addCleanSummarySlide(context, "REGISTER");
+        buildRegisterSlide(registerSlide, pages[index], index + 1, pages.length);
+      }
+
+      await context.sync();
+    });
+
+    return {
+      slidesCreated: 1 + groupIssuesForRegister(issues, 8).length,
+      issueCount: issues.length,
+    };
+  }
+
 }

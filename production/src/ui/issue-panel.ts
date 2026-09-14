@@ -33,6 +33,13 @@ type Elements = {
   newStatusName: HTMLInputElement;
   addStatus: HTMLButtonElement;
   statusLibraryList: HTMLElement;
+  applySettingsAll: HTMLButtonElement;
+  refreshSummaryPreview: HTMLButtonElement;
+  generateSummary: HTMLButtonElement;
+  summaryIssueCount: HTMLElement;
+  summaryActionCount: HTMLElement;
+  summaryOpenCount: HTMLElement;
+  summaryClosedCount: HTMLElement;
 };
 
 let currentIssue: Issue | null = null;
@@ -69,6 +76,13 @@ function elements(): Elements {
     newStatusName: el<HTMLInputElement>("newStatusName"),
     addStatus: el<HTMLButtonElement>("addStatusBtn"),
     statusLibraryList: el<HTMLElement>("statusLibraryList"),
+    applySettingsAll: el<HTMLButtonElement>("applySettingsAllBtn"),
+    refreshSummaryPreview: el<HTMLButtonElement>("refreshSummaryPreviewBtn"),
+    generateSummary: el<HTMLButtonElement>("generateSummaryBtn"),
+    summaryIssueCount: el<HTMLElement>("summaryIssueCount"),
+    summaryActionCount: el<HTMLElement>("summaryActionCount"),
+    summaryOpenCount: el<HTMLElement>("summaryOpenCount"),
+    summaryClosedCount: el<HTMLElement>("summaryClosedCount"),
   };
 }
 
@@ -85,6 +99,9 @@ function setBusy(busy: boolean): void {
   ui.saveAction.disabled = busy;
   ui.addParty.disabled = busy;
   ui.addStatus.disabled = busy;
+  ui.applySettingsAll.disabled = busy;
+  ui.refreshSummaryPreview.disabled = busy;
+  ui.generateSummary.disabled = busy;
 }
 
 function formatTimestamp(value?: string): string {
@@ -534,11 +551,79 @@ async function removeParty(party: Party): Promise<void> {
   }
 }
 
+
+async function moveParty(index: number, direction: -1 | 1): Promise<void> {
+  const target = index + direction;
+  if (target < 0 || target >= settings.parties.length) return;
+
+  const reordered = [...settings.parties];
+  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+  settings = { ...settings, parties: reordered };
+
+  try {
+    await persistSettings("Party order saved. Apply settings to all issue slides when ready.");
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+async function applySettingsToAllSlides(): Promise<void> {
+  setBusy(true);
+  showBanner("Applying settings to all IssueFlow slides…", "info");
+
+  try {
+    const result = await service.applySettingsToAllIssueSlides();
+    if (result.failed === 0) {
+      showBanner(`Settings applied to ${result.updated} issue slide(s).`, "success");
+    } else {
+      showBanner(
+        `Updated ${result.updated} slide(s); ${result.failed} failed. ${result.errors.slice(0, 2).join(" | ")}`,
+        "error"
+      );
+    }
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function refreshSummaryPreview(): Promise<void> {
+  try {
+    const stats = await service.getSummaryStats();
+    const ui = elements();
+    ui.summaryIssueCount.textContent = String(stats.issueCount);
+    ui.summaryActionCount.textContent = String(stats.actionCount);
+    ui.summaryOpenCount.textContent = String(stats.openCount);
+    ui.summaryClosedCount.textContent = String(stats.closedCount);
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+async function generateSummary(): Promise<void> {
+  setBusy(true);
+  showBanner("Generating dashboard and action register…", "info");
+
+  try {
+    const result = await service.generateSummary();
+    await refreshSummaryPreview();
+    showBanner(
+      `Summary refreshed: ${result.slidesCreated} generated slide(s) from ${result.issueCount} issue(s).`,
+      "success"
+    );
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
 function renderPartyLibrary(): void {
   const ui = elements();
   ui.partyLibraryList.innerHTML = "";
 
-  settings.parties.forEach((party) => {
+  settings.parties.forEach((party, index) => {
     const item = document.createElement("div");
     item.className = "library-item party-library-item";
 
@@ -560,6 +645,26 @@ function renderPartyLibrary(): void {
 
     const actions = document.createElement("div");
     actions.className = "party-item-actions";
+
+    const orderControls = document.createElement("div");
+    orderControls.className = "party-order-controls";
+
+    const up = document.createElement("button");
+    up.className = "secondary";
+    up.textContent = "↑";
+    up.title = "Move up";
+    up.disabled = index === 0;
+    up.addEventListener("click", () => void moveParty(index, -1));
+
+    const down = document.createElement("button");
+    down.className = "secondary";
+    down.textContent = "↓";
+    down.title = "Move down";
+    down.disabled = index === settings.parties.length - 1;
+    down.addEventListener("click", () => void moveParty(index, 1));
+
+    orderControls.append(up, down);
+    actions.appendChild(orderControls);
 
     const upload = document.createElement("button");
     upload.className = "secondary";
@@ -696,6 +801,11 @@ export async function initializeIssuePanel(): Promise<void> {
   ui.cancelEditAction.addEventListener("click", resetActionEditor);
   ui.addParty.addEventListener("click", addParty);
   ui.addStatus.addEventListener("click", addStatus);
+  ui.applySettingsAll.addEventListener("click", applySettingsToAllSlides);
+  ui.refreshSummaryPreview.addEventListener("click", refreshSummaryPreview);
+  ui.generateSummary.addEventListener("click", generateSummary);
+
+  void refreshSummaryPreview();
 
   try {
     const issue = await service.readSelectedIssue();

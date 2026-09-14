@@ -76,3 +76,13 @@
 - IssueFlow had been passing the full browser data URL (`data:image/...;base64,...`)
 - logo rendering now strips the data-URL prefix before calling setImage()
 - existing stored logos remain compatible; users do not need to upload them again
+
+## Production V1 P4
+- added Up / Down party ordering controls
+- party order is presentation-level settings and drives every issue-sheet header
+- added Apply Settings to All Issue Slides
+- global apply preserves manual Reference Images and issue/action data
+- added Summary tab with live issue/action/open/closed preview
+- added Generate / Refresh Summary
+- summary creates one dashboard plus paginated action-register slides
+- existing generated summary slides are replaced on refresh

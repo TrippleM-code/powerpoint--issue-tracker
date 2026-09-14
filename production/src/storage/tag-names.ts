@@ -4,6 +4,8 @@ export const TAGS = {
   issueJson: "ISSUEFLOW_ISSUE_JSON",
   managed: "ISSUEFLOW_MANAGED",
   managedRole: "ISSUEFLOW_MANAGED_ROLE",
+  summary: "ISSUEFLOW_SUMMARY",
+  summaryType: "ISSUEFLOW_SUMMARY_TYPE",
 } as const;
 
 export const SCHEMA_VERSION = "1";

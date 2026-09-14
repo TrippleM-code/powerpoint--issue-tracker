@@ -14,12 +14,13 @@
         <div class="eyebrow">IssueFlow</div>
         <h1>PowerPoint Issue Manager</h1>
       </div>
-      <span id="appVersion" class="version">Production V1 · P3.2</span>
+      <span id="appVersion" class="version">Production V1 · P4</span>
     </header>
 
     <nav class="tabs" aria-label="IssueFlow sections">
       <button class="tab-button active" data-tab="issue" aria-selected="true">Issue</button>
       <button class="tab-button" data-tab="actions" aria-selected="false">Actions</button>
+      <button class="tab-button" data-tab="summary" aria-selected="false">Summary</button>
       <button class="tab-button" data-tab="settings" aria-selected="false">Settings</button>
     </nav>
 
@@ -82,6 +83,32 @@
       </section>
     </section>
 
+
+    <section id="tab-summary" class="tab-panel">
+      <section class="card">
+        <div class="section-title">Summary & Register</div>
+        <p class="hint">
+          Creates a dashboard followed by a paginated action register from all IssueFlow issue slides.
+        </p>
+
+        <div class="summary-kpis">
+          <div><span>Issues</span><strong id="summaryIssueCount">—</strong></div>
+          <div><span>Actions</span><strong id="summaryActionCount">—</strong></div>
+          <div><span>Open</span><strong id="summaryOpenCount">—</strong></div>
+          <div><span>Closed</span><strong id="summaryClosedCount">—</strong></div>
+        </div>
+
+        <div class="button-stack">
+          <button id="refreshSummaryPreviewBtn" class="secondary">Refresh Preview</button>
+          <button id="generateSummaryBtn" class="primary">Generate / Refresh Summary</button>
+        </div>
+
+        <p class="hint">
+          Existing IssueFlow summary slides are replaced. Issue slides and manual reference content are not changed.
+        </p>
+      </section>
+    </section>
+
     <section id="tab-settings" class="tab-panel">
       <section class="card">
         <div class="section-title">Settings</div>
@@ -118,9 +145,16 @@
           These libraries are stored with the PowerPoint document so the same choices are available to everyone using this file.
         </div>
 
+        <div class="settings-apply">
+          <button id="applySettingsAllBtn" class="primary">Apply Settings to All Issue Slides</button>
+          <p class="hint">
+            Rebuilds IssueFlow-managed header and layout on every issue slide while preserving manual reference images, text and annotations.
+          </p>
+        </div>
+
         <div class="about-block">
           <strong>IssueFlow Production V1</strong>
-          <span>Build P3.2</span>
+          <span>Build P4</span>
         </div>
       </section>
     </section>
