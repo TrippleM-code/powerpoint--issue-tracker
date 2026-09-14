@@ -218,7 +218,7 @@ function editAction(actionId: string): void {
   // If an old action uses a value no longer in the library, do not silently
   // replace it. Ask the user to restore that value in Settings first.
   const partyExists = settings.parties.some(
-    (value) => value.toLowerCase() === action.party.toLowerCase()
+    (value) => value.name.toLowerCase() === action.party.toLowerCase()
   );
   const statusExists = settings.statuses.some(
     (value) => value.toLowerCase() === action.status.toLowerCase()
@@ -252,7 +252,7 @@ async function saveAction(): Promise<void> {
     if (!required) throw new Error("Action Required is required.");
     if (!status) throw new Error("Choose a Status.");
 
-    if (!settings.parties.includes(party)) {
+    if (!settings.parties.some((item) => item.name === party)) {
       throw new Error("Selected party is not in the Settings party library.");
     }
     if (!settings.statuses.includes(status)) {

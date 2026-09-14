@@ -63,3 +63,9 @@
 - slide header renders equal-width cells for all configured parties
 - logo shown when available; party name shown as fallback
 - Issue ID / Created / Updated block remains on the right
+
+## Production V1 P3.1
+- fixed Vercel TypeScript build error after Party Library changed from string[] to Party[]
+- fixed Party.name comparison while editing an action
+- fixed Party membership validation while saving an action
+- no functional changes to P3 logo/header behavior
