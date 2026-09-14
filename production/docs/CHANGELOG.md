@@ -86,3 +86,9 @@
 - added Generate / Refresh Summary
 - summary creates one dashboard plus paginated action-register slides
 - existing generated summary slides are replaced on refresh
+
+## Production V1 P4.1
+- added explicit no-cache headers for `/` and `/index.html`
+- retained long immutable caching for hashed Vite assets
+- production dev manifest now uses `?v=p4.1` cache-busting query
+- prevents PowerPoint task pane from remaining on an older deployed UI after Vercel updates
