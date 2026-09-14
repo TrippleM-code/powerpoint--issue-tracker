@@ -34,6 +34,18 @@ async function loadShapeTags(context: any, slide: any): Promise<any[]> {
   return slide.shapes.items;
 }
 
+function imageDataUrlToBase64(value: string): string {
+  const text = String(value || "").trim();
+  const comma = text.indexOf(",");
+
+  if (text.startsWith("data:image/") && comma >= 0) {
+    return text.slice(comma + 1);
+  }
+
+  // Backward compatibility if a future settings version already stores raw Base64.
+  return text;
+}
+
 function addManagedTag(shape: any, role: string): void {
   shape.tags.add(TAGS.managed, TRUE);
   shape.tags.add(TAGS.managedRole, role);
@@ -190,7 +202,7 @@ export class PowerPointService {
             height: partyHeaderH - 10,
           });
           logoBox.lineFormat.transparency = 1.0;
-          logoBox.fill.setImage(party.logoDataUrl);
+          logoBox.fill.setImage(imageDataUrlToBase64(party.logoDataUrl));
           addManagedTag(logoBox, `PARTY_${index}_LOGO`);
         } else {
           const name = addText(

@@ -69,3 +69,10 @@
 - fixed Party.name comparison while editing an action
 - fixed Party membership validation while saving an action
 - no functional changes to P3 logo/header behavior
+
+## Production V1 P3.2
+- fixed broken party-logo display in PowerPoint
+- PowerPoint ShapeFill.setImage requires raw Base64 image data
+- IssueFlow had been passing the full browser data URL (`data:image/...;base64,...`)
+- logo rendering now strips the data-URL prefix before calling setImage()
+- existing stored logos remain compatible; users do not need to upload them again
