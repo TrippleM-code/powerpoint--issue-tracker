@@ -14,3 +14,10 @@ export function validateIssueDraft(draft: IssueDraft): string[] {
   if (!draft.description.trim()) errors.push("Description is required.");
   return errors;
 }
+
+export function isDuplicateIssueId(candidateId: string, existingIds: string[]): boolean {
+  const candidate = normalizeIssueId(candidateId);
+  if (!candidate) return false;
+
+  return existingIds.some((existingId) => normalizeIssueId(existingId) === candidate);
+}

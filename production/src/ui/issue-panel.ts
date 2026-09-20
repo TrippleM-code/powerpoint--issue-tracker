@@ -1,5 +1,5 @@
 import type { ActionItem, Issue, Party } from "../domain/models";
-import { normalizeIssueId, validateIssueDraft } from "../domain/validation";
+import { isDuplicateIssueId, normalizeIssueId, validateIssueDraft } from "../domain/validation";
 import { statusCssClass } from "../domain/status";
 import { PowerPointService } from "../services/powerpoint-service";
 import {
@@ -206,10 +206,25 @@ async function persistIssue(issue: Issue, message: string): Promise<void> {
   showBanner(message, "success");
 }
 
+async function ensureNewIssueIdIsUnique(issue: Issue): Promise<void> {
+  // Existing issue slides may refresh their own ID normally.
+  if (currentIssue) return;
+
+  const records = await service.readAllIssues();
+  const existingIds = records.map((record) => record.issue.id);
+
+  if (isDuplicateIssueId(issue.id, existingIds)) {
+    throw new Error(
+      `Issue ID ${issue.id} already exists on another slide. Use Navigate to open it, or choose a new Issue ID.`
+    );
+  }
+}
+
 async function saveOnly(): Promise<void> {
   setBusy(true);
   try {
     const issue = buildIssueFromForm();
+    await ensureNewIssueIdIsUnique(issue);
     await persistIssue(issue, "Issue data saved.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
@@ -222,6 +237,7 @@ async function refreshSheet(): Promise<void> {
   setBusy(true);
   try {
     const issue = buildIssueFromForm();
+    await ensureNewIssueIdIsUnique(issue);
     await service.saveSelectedIssue(issue);
     await service.renderSelectedIssue(issue);
     populate(issue);
@@ -280,6 +296,7 @@ async function saveAction(): Promise<void> {
   try {
     const ui = elements();
     const baseIssue = buildIssueFromForm();
+    await ensureNewIssueIdIsUnique(baseIssue);
     const party = ui.actionParty.value.trim();
     const required = ui.actionRequired.value.trim();
     const status = ui.actionStatus.value.trim();
