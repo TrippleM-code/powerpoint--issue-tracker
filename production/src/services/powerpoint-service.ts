@@ -105,7 +105,13 @@ function addThinRect(
 
 export interface IssueSlideRecord {
   slideId: string;
+  slideNumber: number;
   issue: Issue;
+}
+
+export interface SelectedIssueState {
+  slideId: string;
+  issue: Issue | null;
 }
 
 export interface ApplyAllResult {
@@ -350,21 +356,31 @@ function buildRegisterSlide(
 }
 
 export class PowerPointService {
-  async readSelectedIssue(): Promise<Issue | null> {
+  async readSelectedIssueState(): Promise<SelectedIssueState> {
     return PowerPoint.run(async (context: any) => {
       const slide = await getSelectedSlide(context);
       slide.tags.load("items/key,value");
       await context.sync();
 
       const json = readTag(slide.tags.items, TAGS.issueJson);
-      if (!json) return null;
+      if (!json) {
+        return { slideId: slide.id, issue: null };
+      }
 
       try {
-        return JSON.parse(json) as Issue;
+        return {
+          slideId: slide.id,
+          issue: JSON.parse(json) as Issue,
+        };
       } catch {
         throw new Error("This slide contains invalid IssueFlow metadata.");
       }
     });
+  }
+
+  async readSelectedIssue(): Promise<Issue | null> {
+    const state = await this.readSelectedIssueState();
+    return state.issue;
   }
 
   async saveSelectedIssue(issue: Issue): Promise<void> {
@@ -680,22 +696,26 @@ export class PowerPointService {
 
       const records: IssueSlideRecord[] = [];
 
-      for (const slide of slides.items) {
+      slides.items.forEach((slide: any, index: number) => {
         const isSummary = readTag(slide.tags.items, TAGS.summary) === TRUE;
-        if (isSummary) continue;
+        if (isSummary) return;
 
         const json = readTag(slide.tags.items, TAGS.issueJson);
-        if (!json) continue;
+        if (!json) return;
 
         try {
           const issue = JSON.parse(json) as Issue;
           if (issue && issue.id) {
-            records.push({ slideId: slide.id, issue });
+            records.push({
+              slideId: slide.id,
+              slideNumber: index + 1,
+              issue,
+            });
           }
         } catch {
           // Skip invalid issue metadata; the current-slide workflow reports it directly.
         }
-      }
+      });
 
       return records;
     });

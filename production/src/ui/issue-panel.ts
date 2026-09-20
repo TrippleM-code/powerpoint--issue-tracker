@@ -11,6 +11,8 @@ import {
 
 const service = new PowerPointService();
 
+declare const Office: any;
+
 type Elements = {
   issueId: HTMLInputElement;
   areaCode: HTMLInputElement;
@@ -47,8 +49,11 @@ type Elements = {
 };
 
 let currentIssue: Issue | null = null;
+let currentSlideId: string | null = null;
 let settings: IssueFlowSettings = getDefaultSettings();
 let removeArmedId: string | null = null;
+let suppressSelectionRefresh = false;
+let selectionRefreshTimer: number | undefined;
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -206,25 +211,111 @@ async function persistIssue(issue: Issue, message: string): Promise<void> {
   showBanner(message, "success");
 }
 
-async function ensureNewIssueIdIsUnique(issue: Issue): Promise<void> {
-  // Existing issue slides may refresh their own ID normally.
-  if (currentIssue) return;
+async function ensurePanelMatchesSelectedSlide(): Promise<void> {
+  const state = await service.readSelectedIssueState();
 
-  const records = await service.readAllIssues();
-  const existingIds = records.map((record) => record.issue.id);
+  if (state.slideId === currentSlideId) return;
 
-  if (isDuplicateIssueId(issue.id, existingIds)) {
-    throw new Error(
-      `Issue ID ${issue.id} already exists on another slide. Use Navigate to open it, or choose a new Issue ID.`
-    );
+  currentSlideId = state.slideId;
+  populate(state.issue);
+  resetActionEditor();
+
+  throw new Error(
+    state.issue
+      ? `Selected slide changed. IssueFlow loaded ${state.issue.id}. Please try again.`
+      : "Selected slide changed. IssueFlow loaded the blank slide. Enter the new Issue ID and try again."
+  );
+}
+
+async function ensureIssueIdCanBeSaved(issue: Issue): Promise<void> {
+  const selected = await service.readSelectedIssueState();
+
+  // Existing IssueFlow slide: only its own stored ID may be saved/refreshed.
+  if (selected.issue) {
+    if (normalizeIssueId(selected.issue.id) !== normalizeIssueId(issue.id)) {
+      throw new Error(
+        `This slide already belongs to ${selected.issue.id}. Create a new blank slide for a new Issue ID.`
+      );
+    }
+    return;
   }
+
+  // Blank/new slide: the ID must be unique across the whole presentation.
+  const records = await service.readAllIssues();
+  const matches = records.filter((record) =>
+    isDuplicateIssueId(issue.id, [record.issue.id])
+  );
+
+  if (matches.length === 0) return;
+
+  const slideNumbers = matches.map((record) => record.slideNumber);
+  const location =
+    slideNumbers.length === 1
+      ? `Slide ${slideNumbers[0]}`
+      : `Slides ${slideNumbers.join(", ")}`;
+
+  throw new Error(
+    `Cannot create issue. Issue ID ${issue.id} already exists on ${location}.`
+  );
+}
+
+async function refreshPanelForSelectedSlide(
+  announce: boolean,
+  force = false
+): Promise<void> {
+  const state = await service.readSelectedIssueState();
+
+  if (!force && state.slideId === currentSlideId) return;
+
+  currentSlideId = state.slideId;
+  populate(state.issue);
+  resetActionEditor();
+
+  if (!announce) return;
+
+  showBanner(
+    state.issue
+      ? `Existing IssueFlow issue ${state.issue.id} loaded.`
+      : "Blank slide selected. Enter a new Issue ID.",
+    "info"
+  );
+}
+
+function handleDocumentSelectionChanged(): void {
+  if (suppressSelectionRefresh) return;
+
+  if (selectionRefreshTimer !== undefined) {
+    window.clearTimeout(selectionRefreshTimer);
+  }
+
+  selectionRefreshTimer = window.setTimeout(() => {
+    void refreshPanelForSelectedSlide(true).catch((error) => {
+      showBanner(error instanceof Error ? error.message : String(error), "error");
+    });
+  }, 100);
+}
+
+function registerDocumentSelectionHandler(): void {
+  Office.context.document.addHandlerAsync(
+    Office.EventType.DocumentSelectionChanged,
+    handleDocumentSelectionChanged,
+    (result: any) => {
+      if (result.status === Office.AsyncResultStatus.Failed) {
+        showBanner(
+          result.error?.message || "Could not watch for slide changes.",
+          "error"
+        );
+      }
+    }
+  );
 }
 
 async function saveOnly(): Promise<void> {
   setBusy(true);
   try {
+    await ensurePanelMatchesSelectedSlide();
     const issue = buildIssueFromForm();
-    await ensureNewIssueIdIsUnique(issue);
+    await ensureIssueIdCanBeSaved(issue);
     await persistIssue(issue, "Issue data saved.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
@@ -236,8 +327,9 @@ async function saveOnly(): Promise<void> {
 async function refreshSheet(): Promise<void> {
   setBusy(true);
   try {
+    await ensurePanelMatchesSelectedSlide();
     const issue = buildIssueFromForm();
-    await ensureNewIssueIdIsUnique(issue);
+    await ensureIssueIdCanBeSaved(issue);
     await service.saveSelectedIssue(issue);
     await service.renderSelectedIssue(issue);
     populate(issue);
@@ -295,8 +387,9 @@ async function saveAction(): Promise<void> {
   setBusy(true);
   try {
     const ui = elements();
+    await ensurePanelMatchesSelectedSlide();
     const baseIssue = buildIssueFromForm();
-    await ensureNewIssueIdIsUnique(baseIssue);
+    await ensureIssueIdCanBeSaved(baseIssue);
     const party = ui.actionParty.value.trim();
     const required = ui.actionRequired.value.trim();
     const status = ui.actionStatus.value.trim();
@@ -467,17 +560,21 @@ async function goToIssue(): Promise<void> {
   }
 
   setBusy(true);
+  suppressSelectionRefresh = true;
   try {
     await service.goToIssue(issueId);
 
     // Load the issue from the newly selected slide into the Issue tab.
-    const issue = await service.readSelectedIssue();
-    populate(issue);
+    const state = await service.readSelectedIssueState();
+    currentSlideId = state.slideId;
+    populate(state.issue);
+    resetActionEditor();
 
     showBanner(`Opened ${issueId.toUpperCase()}.`, "success");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
   } finally {
+    suppressSelectionRefresh = false;
     setBusy(false);
   }
 }
@@ -657,6 +754,7 @@ async function moveParty(index: number, direction: -1 | 1): Promise<void> {
 
 async function applySettingsToAllSlides(): Promise<void> {
   setBusy(true);
+  suppressSelectionRefresh = true;
   showBanner("Applying settings to all IssueFlow slides…", "info");
 
   try {
@@ -672,7 +770,14 @@ async function applySettingsToAllSlides(): Promise<void> {
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
   } finally {
+    suppressSelectionRefresh = false;
     setBusy(false);
+
+    try {
+      await refreshPanelForSelectedSlide(false, true);
+    } catch {
+      // Non-fatal: Apply Settings already completed.
+    }
   }
 }
 
@@ -916,14 +1021,15 @@ export async function initializeIssuePanel(): Promise<void> {
     }
   });
 
+  registerDocumentSelectionHandler();
+
   void refreshSummaryPreview();
   void refreshIssueNavigator();
 
   try {
-    const issue = await service.readSelectedIssue();
-    populate(issue);
-    if (issue) showBanner("Existing IssueFlow issue loaded.", "info");
+    await refreshPanelForSelectedSlide(true, true);
   } catch (error) {
+    currentSlideId = null;
     populate(null);
     showBanner(error instanceof Error ? error.message : String(error), "error");
   }
