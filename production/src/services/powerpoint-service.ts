@@ -460,23 +460,45 @@ function buildRegisterSlide(
   const GRID = "#D7E1EB";
   const TEXT = "#172538";
 
-  addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
-  addText(slide, "ACTION REGISTER", 34, 15, 430, 24, { size: 21, bold: true, color: "#FFFFFF" });
-  addText(slide, `Page ${pageNo} of ${pageCount}`, 805, 19, 115, 16, { size: 8.5, color: "#DCE7EF" });
+  // Compact register header to maximize usable table area.
+  const headerH = 46;
+  addFilledRect(slide, 0, 0, 960, headerH, NAVY, NAVY);
+  addText(slide, "ACTION REGISTER", 24, 11, 430, 20, {
+    size: 17,
+    bold: true,
+    color: "#FFFFFF"
+  });
+  addText(slide, `Page ${pageNo} of ${pageCount}`, 812, 14, 116, 14, {
+    size: 7.5,
+    color: "#DCE7EF"
+  });
 
-  const left = 18;
-  const top = 82;
-  const headH = 30;
-  const rowH = 48;
-  const widths = [90, 110, 210, 104, 282, 125] as const;
-  const headers = ["Issue ID", "Area / Room", "Description", "Action By", "Action Required", "Status"];
+  // Compact table geometry.
+  // 14 action rows fit comfortably on a 16:9 slide while remaining readable.
+  const left = 12;
+  const top = 58;
+  const headH = 24;
+  const rowH = 31;
+
+  // Rebalanced widths: keep more space for Description and Action Required.
+  const widths = [82, 92, 194, 104, 324, 128] as const;
+  const headers = [
+    "Issue ID",
+    "Area / Room",
+    "Description",
+    "Action By",
+    "Action Required",
+    "Status",
+  ];
 
   let x = left;
   headers.forEach((header, index) => {
     const width = widths[index] ?? 0;
     addFilledRect(slide, x, top, width, headH, NAVY, NAVY);
-    addText(slide, header, x + 7, top + 8, width - 14, 14, {
-      size: 7.8, bold: true, color: "#FFFFFF"
+    addText(slide, header, x + 5, top + 5, width - 10, 13, {
+      size: 7,
+      bold: true,
+      color: "#FFFFFF"
     });
     x += width;
   });
@@ -494,7 +516,13 @@ function buildRegisterSlide(
     const issue = group.issue;
     const actions = issue.actions.length
       ? issue.actions
-      : [{ id: "none", party: "—", required: "No actions", status: "—", createdAt: issue.createdAt }];
+      : [{
+          id: "none",
+          party: "—",
+          required: "No actions",
+          status: "—",
+          createdAt: issue.createdAt,
+        }];
 
     const visible = actions.slice(group.start, group.start + group.count);
     const groupTop = top + headH + rowIndex * rowH;
@@ -502,47 +530,81 @@ function buildRegisterSlide(
     const baseFill = rowIndex % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
 
     let colX = left;
+
     addFilledRect(slide, colX, groupTop, issueW, groupHeight, baseFill, GRID);
-    addText(slide, issue.id, colX + 7, groupTop + 8, issueW - 14, Math.max(18, groupHeight - 12), {
-      size: 8.4, bold: true, color: "#1769AA"
-    });
+    addText(
+      slide,
+      issue.id,
+      colX + 5,
+      groupTop + 4,
+      issueW - 10,
+      Math.max(16, groupHeight - 8),
+      { size: 7.2, bold: true, color: "#1769AA" }
+    );
     colX += issueW;
 
     addFilledRect(slide, colX, groupTop, areaW, groupHeight, baseFill, GRID);
     addText(
       slide,
       [issue.areaCode, issue.roomSpace].filter(Boolean).join("\n") || "—",
-      colX + 7, groupTop + 7, areaW - 14, Math.max(18, groupHeight - 12),
-      { size: 7.5, color: TEXT }
+      colX + 5,
+      groupTop + 4,
+      areaW - 10,
+      Math.max(16, groupHeight - 8),
+      { size: 6.8, color: TEXT }
     );
     colX += areaW;
 
     addFilledRect(slide, colX, groupTop, descW, groupHeight, baseFill, GRID);
-    addText(slide, issue.description || "—", colX + 7, groupTop + 7, descW - 14, Math.max(18, groupHeight - 12), {
-      size: 7.5, color: TEXT
-    });
+    addText(
+      slide,
+      issue.description || "—",
+      colX + 5,
+      groupTop + 4,
+      descW - 10,
+      Math.max(16, groupHeight - 8),
+      { size: 6.8, color: TEXT }
+    );
     colX += descW;
 
     visible.forEach((action, localIndex) => {
       const rowTop = groupTop + localIndex * rowH;
 
       addFilledRect(slide, colX, rowTop, partyW, rowH, "#FFFFFF", GRID);
-      addText(slide, action.party, colX + 7, rowTop + 7, partyW - 14, rowH - 12, {
-        size: 7.8, bold: true, color: TEXT
-      });
+      addText(
+        slide,
+        action.party,
+        colX + 5,
+        rowTop + 4,
+        partyW - 10,
+        rowH - 8,
+        { size: 6.8, bold: true, color: TEXT }
+      );
 
       const actionX = colX + partyW;
       addFilledRect(slide, actionX, rowTop, actionW, rowH, "#FFFFFF", GRID);
-      addText(slide, action.required, actionX + 7, rowTop + 7, actionW - 14, rowH - 12, {
-        size: 7.4, color: TEXT
-      });
+      addText(
+        slide,
+        action.required,
+        actionX + 5,
+        rowTop + 4,
+        actionW - 10,
+        rowH - 8,
+        { size: 6.7, color: TEXT }
+      );
 
       const statusX = actionX + actionW;
       const colors = statusColors(action.status);
       addFilledRect(slide, statusX, rowTop, statusW, rowH, colors.fill, GRID);
-      addText(slide, action.status, statusX + 7, rowTop + 7, statusW - 14, rowH - 12, {
-        size: 7.8, bold: true, color: colors.text
-      });
+      addText(
+        slide,
+        action.status,
+        statusX + 5,
+        rowTop + 4,
+        statusW - 10,
+        rowH - 8,
+        { size: 6.8, bold: true, color: colors.text }
+      );
     });
 
     rowIndex += visible.length;
@@ -997,7 +1059,7 @@ export class PowerPointService {
   async generateSummary(): Promise<{ slidesCreated: number; issueCount: number }> {
     const records = await this.readAllIssues();
     const issues = records.map((record) => record.issue);
-    const pages = groupIssuesForRegister(issues, 8);
+    const pages = groupIssuesForRegister(issues, 14);
 
     if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8")) {
       throw new Error(
