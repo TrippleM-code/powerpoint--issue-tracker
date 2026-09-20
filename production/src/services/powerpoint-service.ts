@@ -164,60 +164,254 @@ function buildDashboardSlide(slide: any, issues: Issue[]): void {
   const NAVY = "#17344D";
   const GRID = "#D7E1EB";
   const TEXT = "#172538";
-  const allActions = issues.flatMap((issue) => issue.actions);
-  const openCount = issues.filter(
-    (issue) => computeOverallStatus(issue.actions.map((action) => action.status)) !== "Closed"
-  ).length;
-  const closedCount = issues.length - openCount;
+  const TRACK = "#E9EEF4";
 
-  addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
-  addText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, { size: 21, bold: true, color: "#FFFFFF" });
-  addText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
-    size: 8, color: "#DCE7EF"
-  });
+  // Brighter chart colors for stronger on-screen / PDF visibility.
+  const STATUS_OPEN = "#E53935";
+  const STATUS_IN_PROGRESS = "#1E88E5";
+  const STATUS_PENDING = "#FFB300";
+  const STATUS_CLOSED = "#43A047";
+  const STATUS_NO_ACTIONS = "#8E24AA";
 
-  const cards: Array<[string, number]> = [
-    ["Issues", issues.length],
-    ["Open issues", openCount],
-    ["Closed issues", closedCount],
-    ["Actions", allActions.length],
+  const STATUS_COLORS: Record<string, string> = {
+    "Open": STATUS_OPEN,
+    "In Progress": STATUS_IN_PROGRESS,
+    "Pending": STATUS_PENDING,
+    "Closed": STATUS_CLOSED,
+    "No actions": STATUS_NO_ACTIONS,
+  };
+
+  const PARTY_COLORS = [
+    "#1E88E5",
+    "#E53935",
+    "#43A047",
+    "#FB8C00",
+    "#8E24AA",
+    "#00ACC1",
+    "#D81B60",
+    "#7CB342",
   ];
-  cards.forEach(([label, value], index) => {
-    const left = 38 + index * 222;
-    addFilledRect(slide, left, 86, 198, 72, "#FFFFFF", GRID);
-    addText(slide, String(value), left + 18, 98, 155, 24, { size: 21, bold: true, color: TEXT });
-    addText(slide, label, left + 18, 132, 155, 14, { size: 8.5, color: "#68798A" });
+
+  const allActions = issues.flatMap((issue) => issue.actions);
+
+  // ---------------------------------------------------------------------------
+  // OVERALL TRACKING STATUS = one derived status for each issue.
+  // ---------------------------------------------------------------------------
+  const issueStatusCounts = new Map<string, number>([
+    ["Open", 0],
+    ["In Progress", 0],
+    ["Pending", 0],
+    ["Closed", 0],
+    ["No actions", 0],
+  ]);
+
+  issues.forEach((issue) => {
+    const overall = computeOverallStatus(issue.actions.map((action) => action.status));
+    issueStatusCounts.set(overall, (issueStatusCounts.get(overall) || 0) + 1);
   });
 
-  const statusCounts = new Map<string, number>();
-  allActions.forEach((action) => {
-    statusCounts.set(action.status, (statusCounts.get(action.status) || 0) + 1);
+  // ---------------------------------------------------------------------------
+  // ACTIONS TRACKING STATUS = current (not Closed) actions grouped by party.
+  // ---------------------------------------------------------------------------
+  const currentActions = allActions.filter(
+    (action) => action.status.trim().toLowerCase() !== "closed"
+  );
+
+  const currentActionsByParty = new Map<string, number>();
+  currentActions.forEach((action) => {
+    currentActionsByParty.set(
+      action.party,
+      (currentActionsByParty.get(action.party) || 0) + 1
+    );
   });
 
-  addText(slide, "Actions by status", 42, 196, 250, 20, { size: 14, bold: true, color: TEXT });
-  const max = Math.max(1, ...Array.from(statusCounts.values()));
-  Array.from(statusCounts.entries()).slice(0, 7).forEach(([status, count], index) => {
-    const top = 235 + index * 38;
-    const colors = statusColors(status);
-    addText(slide, status, 48, top, 130, 16, { size: 9, color: TEXT });
-    addFilledRect(slide, 178, top + 1, 480, 14, "#EEF2F6", "#EEF2F6");
-    addFilledRect(slide, 178, top + 1, Math.max(6, 480 * count / max), 14, colors.fill, colors.fill);
-    addText(slide, String(count), 674, top, 40, 16, { size: 9, bold: true, color: colors.text });
+  const partyRows = Array.from(currentActionsByParty.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 7);
+
+  // Header
+  addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
+  addText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, {
+    size: 21,
+    bold: true,
+    color: "#FFFFFF",
+  });
+  addText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
+    size: 8,
+    color: "#DCE7EF",
   });
 
-  const partyCounts = new Map<string, number>();
-  allActions.forEach((action) => {
-    partyCounts.set(action.party, (partyCounts.get(action.party) || 0) + 1);
+  // ===========================================================================
+  // 1) OVERALL TRACKING STATUS
+  // ===========================================================================
+  addText(slide, "OVERALL TRACKING STATUS", 34, 72, 300, 20, {
+    size: 13.5,
+    bold: true,
+    color: TEXT,
   });
 
-  addText(slide, "Actions by party", 744, 196, 170, 20, { size: 14, bold: true, color: TEXT });
-  Array.from(partyCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .forEach(([party, count], index) => {
-      addText(slide, party, 746, 235 + index * 31, 145, 15, { size: 8.5, color: TEXT });
-      addText(slide, String(count), 896, 235 + index * 31, 28, 15, { size: 8.5, bold: true, color: "#2677B7" });
+  const overallCards: Array<[string, number, string]> = [
+    ["Total Issues", issues.length, NAVY],
+    ["Open", issueStatusCounts.get("Open") || 0, STATUS_OPEN],
+    ["In Progress", issueStatusCounts.get("In Progress") || 0, STATUS_IN_PROGRESS],
+    ["Pending", issueStatusCounts.get("Pending") || 0, STATUS_PENDING],
+    ["Closed", issueStatusCounts.get("Closed") || 0, STATUS_CLOSED],
+    ["No Actions", issueStatusCounts.get("No actions") || 0, STATUS_NO_ACTIONS],
+  ];
+
+  overallCards.forEach(([label, value, accent], index) => {
+    const left = 28 + index * 151;
+
+    const card = addFilledRect(slide, left, 98, 140, 48, "#FFFFFF", GRID);
+    card.lineFormat.weight = 0.8;
+
+    const accentBar = addFilledRect(slide, left, 98, 5, 48, accent, accent);
+    accentBar.lineFormat.transparency = 1.0;
+
+    addText(slide, String(value), left + 14, 105, 40, 20, {
+      size: 16.5,
+      bold: true,
+      color: TEXT,
     });
+
+    addText(slide, label, left + 14, 128, 116, 11, {
+      size: 7.7,
+      color: "#63768B",
+    });
+  });
+
+  addText(slide, "Issues by overall status", 40, 160, 220, 18, {
+    size: 11.5,
+    bold: true,
+    color: TEXT,
+  });
+
+  const issueStatusRows = ["Open", "In Progress", "Pending", "Closed", "No actions"];
+  const maxIssueStatus = Math.max(
+    1,
+    ...issueStatusRows.map((status) => issueStatusCounts.get(status) || 0)
+  );
+
+  issueStatusRows.forEach((status, index) => {
+    const count = issueStatusCounts.get(status) || 0;
+    const top = 187 + index * 21;
+    const barColor = STATUS_COLORS[status] || "#607D8B";
+
+    addText(slide, status, 45, top - 1, 108, 14, {
+      size: 8.4,
+      color: TEXT,
+    });
+
+    addFilledRect(slide, 160, top + 1, 555, 12, TRACK, TRACK);
+
+    if (count > 0) {
+      addFilledRect(
+        slide,
+        160,
+        top + 1,
+        Math.max(10, 555 * count / maxIssueStatus),
+        12,
+        barColor,
+        barColor
+      );
+    }
+
+    addText(slide, String(count), 730, top - 1, 34, 14, {
+      size: 8.5,
+      bold: true,
+      color: barColor,
+    });
+  });
+
+  // Divider
+  addThinRect(slide, 34, 305, 892, 1, GRID);
+
+  // ===========================================================================
+  // 2) ACTIONS TRACKING STATUS
+  // ===========================================================================
+  addText(slide, "ACTIONS TRACKING STATUS", 34, 318, 300, 20, {
+    size: 13.5,
+    bold: true,
+    color: TEXT,
+  });
+
+  const actionCards: Array<[string, number]> = [
+    ["Total Actions", allActions.length],
+    ["Current Actions", currentActions.length],
+    ["Parties with Current Actions", currentActionsByParty.size],
+  ];
+
+  actionCards.forEach(([label, value], index) => {
+    const left = 40 + index * 298;
+
+    addFilledRect(slide, left, 344, 270, 44, "#FFFFFF", GRID);
+
+    addText(slide, String(value), left + 14, 351, 46, 18, {
+      size: 15.5,
+      bold: true,
+      color: TEXT,
+    });
+
+    addText(slide, label, left + 66, 353, 185, 16, {
+      size: 8.2,
+      color: "#63768B",
+    });
+  });
+
+  addText(slide, "Current actions by party", 40, 400, 250, 18, {
+    size: 11.5,
+    bold: true,
+    color: TEXT,
+  });
+
+  if (partyRows.length === 0) {
+    addText(slide, "No current actions.", 44, 430, 300, 20, {
+      size: 9.5,
+      color: "#63768B",
+    });
+  } else {
+    const maxParty = Math.max(1, ...partyRows.map(([, count]) => count));
+
+    partyRows.forEach(([party, count], index) => {
+      const top = 427 + index * 15;
+      const barColor = PARTY_COLORS[index % PARTY_COLORS.length] ?? "#1E88E5";
+
+      addText(slide, party, 44, top - 1, 165, 12, {
+        size: 7.8,
+        color: TEXT,
+      });
+
+      addFilledRect(slide, 220, top + 1, 620, 9, TRACK, TRACK);
+
+      addFilledRect(
+        slide,
+        220,
+        top + 1,
+        Math.max(10, 620 * count / maxParty),
+        9,
+        barColor,
+        barColor
+      );
+
+      addText(slide, String(count), 855, top - 1, 32, 12, {
+        size: 7.8,
+        bold: true,
+        color: barColor,
+      });
+    });
+
+    if (currentActionsByParty.size > partyRows.length) {
+      addText(
+        slide,
+        `+ ${currentActionsByParty.size - partyRows.length} more party / parties`,
+        44,
+        427 + partyRows.length * 15 + 3,
+        300,
+        12,
+        { size: 7.2, color: "#63768B" }
+      );
+    }
+  }
 }
 
 type RegisterGroup = { issue: Issue; start: number; count: number };
