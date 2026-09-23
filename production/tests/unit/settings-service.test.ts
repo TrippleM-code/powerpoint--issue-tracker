@@ -1,9 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getDefaultSettings, loadSettings } from "../../src/services/settings-service";
+import { getDefaultSettings, loadSettings, saveSettings } from "../../src/services/settings-service";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("IssueFlow settings regression", () => {
+  it("restores the in-memory settings after a failed document save", async () => {
+    const previous = { parties: ["MEP"], statuses: ["Open"] };
+    let stored: unknown = previous;
+    vi.stubGlobal("Office", {
+      AsyncResultStatus: { Succeeded: "succeeded" },
+      context: { document: { settings: {
+        get: () => stored,
+        set: (_key: string, value: unknown) => { stored = value; },
+        saveAsync: (callback: any) => callback({ status: "failed", error: { message: "Save failed" } }),
+      } } },
+    });
+    await expect(saveSettings(getDefaultSettings())).rejects.toThrow("Save failed");
+    expect(stored).toBe(previous);
+  });
   it("returns stable default parties and statuses", () => {
     const settings = getDefaultSettings();
     expect(settings.parties.map((party) => party.name)).toEqual([

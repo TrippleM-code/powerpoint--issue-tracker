@@ -13,6 +13,15 @@ Office.onReady((info: any) => {
     return;
   }
 
+  if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
+    const banner = document.getElementById("statusBanner");
+    if (banner) {
+      banner.textContent = "IssueFlow requires PowerPoint API 1.4 or newer. Update Microsoft 365 and reopen the add-in.";
+      banner.className = "banner error";
+    }
+    return;
+  }
+
   initializeIssuePanel().catch((error: unknown) => {
     const banner = document.getElementById("statusBanner");
     if (banner) {

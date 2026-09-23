@@ -1,3 +1,7 @@
+## P4.8 corrective release — 2026-09-23
+
+Stable slide-target writes; staged rendering and summaries; blocked-edit reset; deck-wide library guards; stored metadata validation; busy-state protection; overflow notice and text fitting; settings rollback; single production source; lint, lockfile and regression tests. See [P4.8 release notes](P4_8_RELEASE.md).
+
 # Changelog
 
 ## Production V1 Foundation

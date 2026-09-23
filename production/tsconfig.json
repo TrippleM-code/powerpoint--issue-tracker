@@ -7,7 +7,7 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "types": [
-      "office-js"
+      "office-js", "vite/client"
     ]
   },
   "include": [

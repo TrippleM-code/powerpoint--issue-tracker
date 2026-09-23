@@ -2,19 +2,14 @@ name: IssueFlow CI
 
 on:
   push:
-    paths:
-      - "production/**"
   pull_request:
-    paths:
-      - "production/**"
+
+permissions:
+  contents: read
 
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: production
 
     steps:
       - name: Checkout repository
@@ -23,10 +18,15 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
+          cache-dependency-path: production/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm run setup
+
+      - name: Lint
+        run: npm run lint
 
       - name: Run tests
         run: npm test

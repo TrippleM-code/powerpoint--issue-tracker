@@ -1,63 +1,46 @@
-# IssueFlow for PowerPoint — Production V1 Foundation
+# IssueFlow for PowerPoint — P4.8 corrective release
 
-This package starts the production rebuild of IssueFlow while keeping the latest alpha frozen as a reference.
+Revised from GitHub commit `dd7e081bcf0a773c370d67bc481a38ff10d494c5` (P4.7).
+The app manages issue sheets, responsible parties, actions, dashboard and action register inside a PowerPoint presentation.
 
-## Production goal
+**`production/` is the only maintained application source.** Root commands delegate to it. Earlier duplicate root source, tests, docs and manifests have been removed. The Git-connected deployment target is `https://powerpoint-issue-tracker.vercel.app`.
 
-A Microsoft PowerPoint Office Add-in for structured issue and action management:
+## Set up and verify (Windows PowerShell)
 
-- Issue ID
-- Area Code
-- Room / Space
-- Description
-- Manual Reference Images area
-- Multiple actions
-  - Action By
-  - Action Required
-  - Status
-- Party logo library
-- Created / Updated timestamps
-- Dashboard + grouped Action Register
-- Issue navigation by typed/pasted Issue ID
+Install Node.js 22.12+ (22 LTS recommended), then run from this folder:
 
-## Production principles
+```powershell
+npm.cmd run setup
+npm.cmd run lint
+npm.cmd test
+npm.cmd run build
+```
 
-- Keep alpha behavior as reference; do not patch the alpha inside production.
-- Separate UI, PowerPoint API, domain logic, layout, storage, and validation.
-- Avoid preview Office.js APIs unless there is no stable alternative.
-- Keep manual PowerPoint content untouched.
-- Use structured metadata as source of truth.
-- Add migrations for future schema changes.
-- Fail safely: no destructive action without clear intent.
-- Keep V1 production backend-free unless a cloud feature creates clear value.
+Alternatively, inside `production/`, run `npm.cmd ci`, followed by the same lint/test/build commands. `production/package-lock.json` locks the dependency tree for both paths. The root package intentionally has no separate application dependencies.
 
-## Recommended stack
+`npm.cmd run dev` starts the browser development server and must remain running while using it. A normal browser cannot exercise PowerPoint document APIs. To verify the add-in, host the build over HTTPS and sideload its manifest in PowerPoint.
 
-- TypeScript
-- Vite
-- Office.js
-- Plain HTML/CSS (no UI framework for V1)
-- Vitest for unit tests
-- ESLint + Prettier
-- Vercel for HTTPS hosting
+## Deploy the revised version
 
-## Build phases
+Use a new extracted folder, not a partial overlay of old source. Keep existing presentations and a copy of the previous project.
 
-1. Foundation
-2. Data + PowerPoint services
-3. Issue sheet renderer
-4. Action management
-5. Summary / register
-6. Validation + migrations
-7. Accessibility + error states
-8. Marketplace readiness
+Vercel may use either configuration:
 
-See `docs/` for the detailed production plan.
+| Root Directory | Install command | Build command | Output |
+|---|---|---|---|
+| Repository root | `npm ci --prefix production` | `npm run build` | `production/dist` |
+| `production` | `npm ci` | `npm run build` | `dist` |
 
-## P1.1 deployment hotfix
+Both configurations build the same source. Corresponding `vercel.json` files are included. If Vercel has manual dashboard overrides, align them with this table.
 
-If P1 failed on Vercel with:
+The source ZIP includes the verified `production/dist` output for static HTTPS hosting. Normal repository builds regenerate it; it is ignored by Git.
 
-`TS2305: Module '../domain/models' has no exported member 'Party'`
+After the Git-triggered deployment is ready, download `/issueflow-p4-8.xml` from the production host or use `production/manifests/issueflow-production-dev-p4-8.xml`. Sideload it in PowerPoint, reopen the pane and verify the **P4.8** label. For a preview deployment, change `SourceLocation` to that preview's HTTPS `/index.html?v=p4.8` before sideloading.
 
-replace the Production P1 files with this P1.1 package. The missing shared domain types are restored.
+If replacing a GitHub checkout, commit the removed duplicate directories as deletions along with the new files. Do not commit `node_modules`, `.env`, or `dist`.
+
+## Corrections and acceptance
+
+Read [the release notes](production/docs/P4_8_RELEASE.md) for fixes, test evidence, limitations and the PowerPoint acceptance checklist. The original alpha ZIP stays in `archive/`; legacy `/taskpane.html` and `/v2/taskpane.html` assets are retained under `production/public/` unchanged. They are compatibility artifacts, not the repaired production UI.
+
+Data stays in presentation tags and Office document settings; no backend, new permission scope, paid API, or AI service was introduced.

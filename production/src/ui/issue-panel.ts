@@ -54,6 +54,9 @@ let settings: IssueFlowSettings = getDefaultSettings();
 let removeArmedId: string | null = null;
 let suppressSelectionRefresh = false;
 let selectionRefreshTimer: number | undefined;
+let busy = false;
+let refreshRequest = 0;
+const disabledBeforeOperation = new Map<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, boolean>();
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -105,16 +108,28 @@ function showBanner(message: string, type: "success" | "error" | "info"): void {
 }
 
 function setBusy(busy: boolean): void {
-  const ui = elements();
-  ui.save.disabled = busy;
-  ui.refresh.disabled = busy;
-  ui.saveAction.disabled = busy;
-  ui.addParty.disabled = busy;
-  ui.addStatus.disabled = busy;
-  ui.applySettingsAll.disabled = busy;
-  ui.refreshSummaryPreview.disabled = busy;
-  ui.generateSummary.disabled = busy;
-  ui.goToIssue.disabled = busy;
+  setOperationBusy(busy);
+}
+
+function setOperationBusy(value: boolean): void {
+  busy = value;
+  refreshRequest += 1;
+  if (selectionRefreshTimer !== undefined) window.clearTimeout(selectionRefreshTimer);
+  if (value) {
+    document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      "button:not(.tab-button), input, select, textarea"
+    ).forEach((control) => {
+      disabledBeforeOperation.set(control, control.disabled);
+      control.disabled = true;
+    });
+  } else {
+    disabledBeforeOperation.forEach((disabled, control) => { control.disabled = disabled; });
+    disabledBeforeOperation.clear();
+    // Pick up slide switches suppressed during the operation, without discarding same-slide drafts.
+    void refreshPanelForSelectedSlide(false).catch((error) => {
+      showBanner(error instanceof Error ? error.message : String(error), "error");
+    });
+  }
 }
 
 function formatTimestamp(value?: string): string {
@@ -184,7 +199,7 @@ function buildIssueFromForm(): Issue {
   const errors = validateIssueDraft(draft);
   if (errors.length) throw new Error(errors.join(" "));
 
-  if (currentIssue && currentIssue.id !== draft.id) {
+  if (currentIssue && normalizeIssueId(currentIssue.id) !== draft.id) {
     throw new Error(
       `This slide already belongs to ${currentIssue.id}. Create a new blank slide for a new Issue ID.`
     );
@@ -205,8 +220,8 @@ function buildIssueFromForm(): Issue {
   };
 }
 
-async function persistIssue(issue: Issue, message: string): Promise<void> {
-  await service.saveSelectedIssue(issue);
+async function persistIssue(issue: Issue, slideId: string, message: string): Promise<void> {
+  await service.saveSelectedIssue(issue, slideId);
   populate(issue);
   showBanner(message, "success");
 }
@@ -237,12 +252,11 @@ async function ensureIssueIdCanBeSaved(issue: Issue): Promise<void> {
         `This slide already belongs to ${selected.issue.id}. Create a new blank slide for a new Issue ID.`
       );
     }
-    return;
   }
 
   // Blank/new slide: the ID must be unique across the whole presentation.
   const records = await service.readAllIssues();
-  const matches = records.filter((record) =>
+  const matches = records.filter((record) => record.slideId !== selected.slideId &&
     isDuplicateIssueId(issue.id, [record.issue.id])
   );
 
@@ -263,7 +277,9 @@ async function refreshPanelForSelectedSlide(
   announce: boolean,
   force = false
 ): Promise<void> {
+  const request = ++refreshRequest;
   const state = await service.readSelectedIssueState();
+  if (request !== refreshRequest || busy) return;
 
   if (!force && state.slideId === currentSlideId) return;
 
@@ -282,7 +298,7 @@ async function refreshPanelForSelectedSlide(
 }
 
 function handleDocumentSelectionChanged(): void {
-  if (suppressSelectionRefresh) return;
+  if (suppressSelectionRefresh || busy) return;
 
   if (selectionRefreshTimer !== undefined) {
     window.clearTimeout(selectionRefreshTimer);
@@ -311,12 +327,13 @@ function registerDocumentSelectionHandler(): void {
 }
 
 async function saveOnly(): Promise<void> {
+  if (busy) return;
   setBusy(true);
   try {
     await ensurePanelMatchesSelectedSlide();
     const issue = buildIssueFromForm();
     await ensureIssueIdCanBeSaved(issue);
-    await persistIssue(issue, "Issue data saved.");
+    await persistIssue(issue, currentSlideId!, "Issue data saved.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
   } finally {
@@ -325,13 +342,13 @@ async function saveOnly(): Promise<void> {
 }
 
 async function refreshSheet(): Promise<void> {
+  if (busy) return;
   setBusy(true);
   try {
     await ensurePanelMatchesSelectedSlide();
     const issue = buildIssueFromForm();
     await ensureIssueIdCanBeSaved(issue);
-    await service.saveSelectedIssue(issue);
-    await service.renderSelectedIssue(issue);
+    await service.renderSelectedIssue(issue, currentSlideId!);
     populate(issue);
     showBanner("Issue sheet refreshed. Manual reference content was preserved.", "success");
   } catch (error) {
@@ -352,12 +369,12 @@ function resetActionEditor(): void {
 }
 
 function editAction(actionId: string): void {
-  if (!currentIssue) return;
+  if (busy || !currentIssue) return;
   const action = currentIssue.actions.find((item) => item.id === actionId);
   if (!action) return;
 
   const ui = elements();
-  ui.editingActionId.value = action.id;
+  resetActionEditor();
 
   // If an old action uses a value no longer in the library, do not silently
   // replace it. Ask the user to restore that value in Settings first.
@@ -377,6 +394,7 @@ function editAction(actionId: string): void {
   }
 
   refreshActionChoices(action.party, action.status);
+  ui.editingActionId.value = action.id;
   ui.actionRequired.value = action.required;
   ui.saveAction.textContent = "Save Action";
   ui.cancelEditAction.classList.remove("hidden");
@@ -384,6 +402,7 @@ function editAction(actionId: string): void {
 }
 
 async function saveAction(): Promise<void> {
+  if (busy) return;
   setBusy(true);
   try {
     const ui = elements();
@@ -410,6 +429,9 @@ async function saveAction(): Promise<void> {
 
     let actions: ActionItem[];
     if (editingId) {
+      if (!baseIssue.actions.some((action) => action.id === editingId)) {
+        throw new Error("The action being edited no longer exists. Cancel editing and reload.");
+      }
       actions = baseIssue.actions.map((action) =>
         action.id === editingId
           ? { ...action, party, required, status, updatedAt: now }
@@ -434,8 +456,7 @@ async function saveAction(): Promise<void> {
       updatedAt: now,
     };
 
-    await service.saveSelectedIssue(issue);
-    await service.renderSelectedIssue(issue);
+    await service.renderSelectedIssue(issue, currentSlideId!);
     populate(issue);
     resetActionEditor();
     showBanner(editingId ? "Action updated." : "Action added.", "success");
@@ -447,7 +468,7 @@ async function saveAction(): Promise<void> {
 }
 
 async function removeAction(actionId: string): Promise<void> {
-  if (!currentIssue) return;
+  if (busy || !currentIssue) return;
 
   if (removeArmedId !== actionId) {
     removeArmedId = actionId;
@@ -458,15 +479,20 @@ async function removeAction(actionId: string): Promise<void> {
 
   setBusy(true);
   try {
+    await ensurePanelMatchesSelectedSlide();
+    const baseIssue = buildIssueFromForm();
+    await ensureIssueIdCanBeSaved(baseIssue);
+    if (!baseIssue.actions.some((action) => action.id === actionId)) {
+      throw new Error("This action no longer exists. Reload the issue.");
+    }
     const now = new Date().toISOString();
     const issue: Issue = {
-      ...currentIssue,
-      actions: currentIssue.actions.filter((action) => action.id !== actionId),
+      ...baseIssue,
+      actions: baseIssue.actions.filter((action) => action.id !== actionId),
       updatedAt: now,
     };
 
-    await service.saveSelectedIssue(issue);
-    await service.renderSelectedIssue(issue);
+    await service.renderSelectedIssue(issue, currentSlideId!);
     populate(issue);
     resetActionEditor();
     showBanner("Action removed.", "success");
@@ -551,6 +577,7 @@ async function refreshIssueNavigator(): Promise<void> {
 }
 
 async function goToIssue(): Promise<void> {
+  if (busy) return;
   const ui = elements();
   const issueId = ui.issueNavigator.value.trim();
 
@@ -626,7 +653,14 @@ function renderLibraryList(
 }
 
 async function persistSettings(message: string): Promise<void> {
-  await saveSettings(settings);
+  try {
+    await saveSettings(settings);
+  } catch (error) {
+    settings = loadSettings();
+    refreshActionChoices();
+    renderSettings();
+    throw error;
+  }
   refreshActionChoices(
     elements().actionParty.value,
     elements().actionStatus.value
@@ -675,6 +709,8 @@ async function compressLogo(file: File): Promise<string> {
 }
 
 async function updatePartyLogo(partyId: string, file: File): Promise<void> {
+  if (busy) return;
+  setBusy(true);
   try {
     const logoDataUrl = await compressLogo(file);
     settings = {
@@ -686,10 +722,14 @@ async function updatePartyLogo(partyId: string, file: File): Promise<void> {
     await persistSettings("Party logo saved.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
   }
 }
 
 async function removePartyLogo(partyId: string): Promise<void> {
+  if (busy) return;
+  setBusy(true);
   settings = {
     ...settings,
     parties: settings.parties.map((party) =>
@@ -701,37 +741,45 @@ async function removePartyLogo(partyId: string): Promise<void> {
     await persistSettings("Party logo removed.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
   }
 }
 
 async function removeParty(party: Party): Promise<void> {
+  if (busy) return;
   if (settings.parties.length <= 1) {
     showBanner("Keep at least one party in the library.", "error");
     return;
   }
 
-  const inUse = currentIssue?.actions.some(
-    (action) => action.party.toLowerCase() === party.name.toLowerCase()
-  );
-  if (inUse) {
-    showBanner("This party is used by an existing action. Update that action before removing it.", "error");
-    return;
-  }
-
-  settings = {
-    ...settings,
-    parties: settings.parties.filter((item) => item.id !== party.id),
-  };
-
+  setBusy(true);
   try {
+    const records = await service.readAllIssues();
+    const inUse = records.some((record) => record.issue.actions.some(
+      (action) => action.party.toLowerCase() === party.name.toLowerCase()
+    ));
+    if (inUse) {
+      showBanner("This party is used by an existing action. Update that action before removing it.", "error");
+      return;
+    }
+
+    settings = {
+      ...settings,
+      parties: settings.parties.filter((item) => item.id !== party.id),
+    };
+
     await persistSettings("Party removed.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
   }
 }
 
 
 async function moveParty(index: number, direction: -1 | 1): Promise<void> {
+  if (busy) return;
   const target = index + direction;
   if (target < 0 || target >= settings.parties.length) return;
 
@@ -745,14 +793,18 @@ async function moveParty(index: number, direction: -1 | 1): Promise<void> {
   reordered[target] = currentParty;
   settings = { ...settings, parties: reordered };
 
+  setBusy(true);
   try {
     await persistSettings("Party order saved. Apply settings to all issue slides when ready.");
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
   }
 }
 
 async function applySettingsToAllSlides(): Promise<void> {
+  if (busy) return;
   setBusy(true);
   suppressSelectionRefresh = true;
   showBanner("Applying settings to all IssueFlow slides…", "info");
@@ -795,6 +847,7 @@ async function refreshSummaryPreview(): Promise<void> {
 }
 
 async function generateSummary(): Promise<void> {
+  if (busy) return;
   setBusy(true);
   showBanner("Generating dashboard and action register…", "info");
 
@@ -913,35 +966,41 @@ function renderSettings(): void {
   renderPartyLibrary();
 
   renderLibraryList(ui.statusLibraryList, settings.statuses, async (value) => {
+    if (busy) return;
     if (settings.statuses.length <= 1) {
       showBanner("Keep at least one status in the library.", "error");
       return;
     }
 
-    const inUse = currentIssue?.actions.some(
-      (action) => action.status.toLowerCase() === value.toLowerCase()
-    );
-    if (inUse) {
-      showBanner("This status is used by an existing action. Update that action before removing it.", "error");
-      return;
-    }
-
-    settings = {
-      ...settings,
-      statuses: settings.statuses.filter(
-        (status) => status.toLowerCase() !== value.toLowerCase()
-      ),
-    };
-
+    setBusy(true);
     try {
+      const records = await service.readAllIssues();
+      const inUse = records.some((record) => record.issue.actions.some(
+        (action) => action.status.toLowerCase() === value.toLowerCase()
+      ));
+      if (inUse) {
+        showBanner("This status is used by an existing action. Update that action before removing it.", "error");
+        return;
+      }
+
+      settings = {
+        ...settings,
+        statuses: settings.statuses.filter(
+          (status) => status.toLowerCase() !== value.toLowerCase()
+        ),
+      };
+
       await persistSettings("Status removed.");
     } catch (error) {
       showBanner(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setBusy(false);
     }
   });
 }
 
 async function addParty(): Promise<void> {
+  if (busy) return;
   const ui = elements();
   const value = ui.newPartyName.value.trim();
 
@@ -960,15 +1019,19 @@ async function addParty(): Promise<void> {
     parties: [...settings.parties, { id: `party-${Date.now().toString(36)}`, name: value }],
   };
 
+  setBusy(true);
   try {
     await persistSettings("Party added.");
     ui.newPartyName.value = "";
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
   }
 }
 
 async function addStatus(): Promise<void> {
+  if (busy) return;
   const ui = elements();
   const value = ui.newStatusName.value.trim();
 
@@ -984,11 +1047,14 @@ async function addStatus(): Promise<void> {
 
   settings = { ...settings, statuses: [...settings.statuses, value] };
 
+  setBusy(true);
   try {
     await persistSettings("Status added.");
     ui.newStatusName.value = "";
   } catch (error) {
     showBanner(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    setBusy(false);
   }
 }
 

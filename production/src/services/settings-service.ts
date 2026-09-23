@@ -97,13 +97,17 @@ export function saveSettings(settings: IssueFlowSettings): Promise<void> {
     statuses: normalizeStatuses(settings.statuses),
   };
 
-  Office.context.document.settings.set(SETTINGS_KEY, normalized);
+  const store = Office.context.document.settings;
+  const previous = store.get(SETTINGS_KEY);
+  store.set(SETTINGS_KEY, normalized);
 
   return new Promise((resolve, reject) => {
     Office.context.document.settings.saveAsync((result: any) => {
       if (result.status === Office.AsyncResultStatus.Succeeded) {
         resolve();
       } else {
+        if (previous === undefined) store.remove(SETTINGS_KEY);
+        else store.set(SETTINGS_KEY, previous);
         reject(new Error(result.error?.message || "Could not save IssueFlow settings."));
       }
     });

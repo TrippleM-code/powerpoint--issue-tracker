@@ -2,6 +2,8 @@ import type { Issue } from "../domain/models";
 import { computeOverallStatus } from "../domain/status";
 import { SCHEMA_VERSION, TAGS } from "../storage/tag-names";
 import { loadSettings } from "./settings-service";
+import { parseIssueMetadata, validateIssue } from "../domain/metadata";
+import { stageShapes } from "./staged-render";
 
 declare const PowerPoint: any;
 declare const Office: any;
@@ -66,6 +68,7 @@ function addText(
   shape.textFrame.textRange.font.bold = options.bold ?? false;
   shape.textFrame.textRange.font.color = options.color ?? "#152336";
   shape.textFrame.verticalAlignment = "Middle";
+  shape.textFrame.autoSizeSetting = "AutoSizeTextToFitShape";
   return shape;
 }
 
@@ -137,7 +140,7 @@ function statusColors(status: string): { fill: string; text: string } {
   }
 }
 
-async function addCleanSummarySlide(context: any, type: string): Promise<any> {
+async function addCleanSummarySlide(context: any, type: string, created: any[]): Promise<any> {
   const slides = context.presentation.slides;
   const count = slides.getCount();
   await context.sync();
@@ -146,6 +149,7 @@ async function addCleanSummarySlide(context: any, type: string): Promise<any> {
   await context.sync();
 
   const slide = slides.getItemAt(count.value);
+  created.push(slide);
   slide.shapes.load("items/id");
   await context.sync();
 
@@ -623,14 +627,10 @@ export class PowerPointService {
         return { slideId: slide.id, issue: null };
       }
 
-      try {
-        return {
-          slideId: slide.id,
-          issue: JSON.parse(json) as Issue,
-        };
-      } catch {
-        throw new Error("This slide contains invalid IssueFlow metadata.");
-      }
+      return {
+        slideId: slide.id,
+        issue: parseIssueMetadata(json, readTag(slide.tags.items, TAGS.schemaVersion), `Slide ${slide.id}`),
+      };
     });
   }
 
@@ -639,9 +639,10 @@ export class PowerPointService {
     return state.issue;
   }
 
-  async saveSelectedIssue(issue: Issue): Promise<void> {
+  async saveSelectedIssue(issue: Issue, expectedSlideId: string): Promise<void> {
+    validateIssue(issue);
     await PowerPoint.run(async (context: any) => {
-      const slide = await getSelectedSlide(context);
+      const slide = await this.getWriteTarget(context, issue, expectedSlideId);
       slide.tags.add(TAGS.app, TRUE);
       slide.tags.add(TAGS.schemaVersion, SCHEMA_VERSION);
       slide.tags.add(TAGS.issueJson, JSON.stringify(issue));
@@ -649,293 +650,322 @@ export class PowerPointService {
     });
   }
 
-  async renderSelectedIssue(issue: Issue): Promise<void> {
+  private async getWriteTarget(context: any, issue: Issue, expectedSlideId: string): Promise<any> {
+    if (!expectedSlideId) throw new Error("Select and load an issue slide before saving.");
+    const selected = await getSelectedSlide(context);
+    if (selected.id !== expectedSlideId) throw new Error("Selected slide changed. Reload the issue and try again.");
+    // Resolve a stable object once; subsequent selection changes cannot redirect the write.
+    const slide = context.presentation.slides.getItem(expectedSlideId);
+    slide.tags.load("items/key,value");
+    await context.sync();
+    if (readTag(slide.tags.items, TAGS.summary) === TRUE) throw new Error("Select an issue slide, not a generated summary.");
+    const json = readTag(slide.tags.items, TAGS.issueJson);
+    if (json) {
+      const stored = parseIssueMetadata(json, readTag(slide.tags.items, TAGS.schemaVersion), `Slide ${expectedSlideId}`);
+      if (stored.id.trim().toUpperCase() !== issue.id.trim().toUpperCase()) {
+        throw new Error(`This slide already belongs to ${stored.id}.`);
+      }
+    }
+    return slide;
+  }
+
+  async renderSelectedIssue(issue: Issue, expectedSlideId: string): Promise<void> {
+    validateIssue(issue);
     const presentationSettings = loadSettings();
 
     await PowerPoint.run(async (context: any) => {
-      const slide = await getSelectedSlide(context);
-      const shapes = await loadShapeTags(context, slide);
-
-      // Delete ONLY IssueFlow-managed shapes. Manual PowerPoint content survives.
-      for (const shape of shapes) {
-        const managed = shape.tags.items.some(
+      const originalSlide = await this.getWriteTarget(context, issue, expectedSlideId);
+      const shapes = await loadShapeTags(context, originalSlide);
+      const previous = shapes.filter((shape: any) => shape.tags.items.some(
           (tag: any) => tag.key === TAGS.managed && tag.value === TRUE
-        );
-        if (managed) shape.delete();
-      }
-      await context.sync();
+      ));
 
-      slide.tags.add(TAGS.app, TRUE);
-      slide.tags.add(TAGS.schemaVersion, SCHEMA_VERSION);
-      slide.tags.add(TAGS.issueJson, JSON.stringify(issue));
+      await stageShapes(context, originalSlide, (slide) => {
+        const NAVY = "#17344D";
+        const GRID = "#C7D6E5";
+        const TEXT = "#172538";
+        const WHITE = "#FFFFFF";
 
-      const NAVY = "#17344D";
-      const GRID = "#C7D6E5";
-      const TEXT = "#172538";
-      const WHITE = "#FFFFFF";
+        // 16:9 widescreen coordinates (points)
+        const pageLeft = 8;
+        const pageTop = 76;
+        const pageBottom = 532;
+        const bodyTop = 108;
+        const bodyH = pageBottom - bodyTop;
 
-      // 16:9 widescreen coordinates (points)
-      const pageLeft = 8;
-      const pageTop = 76;
-      const pageBottom = 532;
-      const bodyTop = 108;
-      const bodyH = pageBottom - bodyTop;
+        // Keep every generated shape inside a 16:9 widescreen slide (960 x 540 pt).
+        const pageRight = 952;
+        const gap = 8;
 
-      // Keep every generated shape inside a 16:9 widescreen slide (960 x 540 pt).
-      const pageRight = 952;
-      const gap = 8;
+        const descX = pageLeft;
+        const descW = 230;
 
-      const descX = pageLeft;
-      const descW = 230;
+        const stripX = descX + descW + gap;
+        const stripW = 36;
 
-      const stripX = descX + descW + gap;
-      const stripW = 36;
+        const refX = stripX + stripW + gap;
+        const refW = 300;
 
-      const refX = stripX + stripW + gap;
-      const refW = 300;
+        const actionsX = refX + refW + gap;
+        const actionsW = pageRight - actionsX;
 
-      const actionsX = refX + refW + gap;
-      const actionsW = pageRight - actionsX;
+        // Production P3 party header: one equal-width cell per configured party.
+        const partyHeaderTop = 18;
+        const partyHeaderH = 42;
+        const identityX = pageRight - 300;
+        const partyHeaderX = pageLeft;
+        const partyHeaderW = identityX - pageLeft - 8;
+        const parties = presentationSettings.parties;
+        const partyCellW = partyHeaderW / Math.max(parties.length, 1);
 
-      // Production P3 party header: one equal-width cell per configured party.
-      const partyHeaderTop = 18;
-      const partyHeaderH = 42;
-      const identityX = pageRight - 300;
-      const partyHeaderX = pageLeft;
-      const partyHeaderW = identityX - pageLeft - 8;
-      const parties = presentationSettings.parties;
-      const partyCellW = partyHeaderW / Math.max(parties.length, 1);
+        parties.forEach((party, index) => {
+          const cellX = partyHeaderX + index * partyCellW;
 
-      parties.forEach((party, index) => {
-        const cellX = partyHeaderX + index * partyCellW;
-
-        const cell = addFilledRect(
-          slide, cellX, partyHeaderTop, partyCellW, partyHeaderH, "#FFFFFF", "#D5DFE9"
-        );
-        addManagedTag(cell, `PARTY_${index}_CELL`);
-
-        if (party.logoDataUrl) {
-          const logoBox = slide.shapes.addGeometricShape("Rectangle", {
-            left: cellX + 6,
-            top: partyHeaderTop + 5,
-            width: Math.max(10, partyCellW - 12),
-            height: partyHeaderH - 10,
-          });
-          logoBox.lineFormat.transparency = 1.0;
-          logoBox.fill.setImage(imageDataUrlToBase64(party.logoDataUrl));
-          addManagedTag(logoBox, `PARTY_${index}_LOGO`);
-        } else {
-          const name = addText(
-            slide, party.name,
-            cellX + 5, partyHeaderTop + 8,
-            Math.max(10, partyCellW - 10), partyHeaderH - 16,
-            { size: 8, bold: true, color: TEXT }
+          const cell = addFilledRect(
+            slide, cellX, partyHeaderTop, partyCellW, partyHeaderH, "#FFFFFF", "#D5DFE9"
           );
-          addManagedTag(name, `PARTY_${index}_NAME`);
-        }
-      });
+          addManagedTag(cell, `PARTY_${index}_CELL`);
 
-      // Production P2.1 issue identity header.
-      const identityTop = 18;
-      const identityH = 42;
-      const identityW = 292;
+          if (party.logoDataUrl) {
+            const logoBox = slide.shapes.addGeometricShape("Rectangle", {
+              left: cellX + 6,
+              top: partyHeaderTop + 5,
+              width: Math.max(10, partyCellW - 12),
+              height: partyHeaderH - 10,
+            });
+            logoBox.lineFormat.transparency = 1.0;
+            logoBox.fill.setImage(imageDataUrlToBase64(party.logoDataUrl));
+            addManagedTag(logoBox, `PARTY_${index}_LOGO`);
+          } else {
+            const name = addText(
+              slide, party.name,
+              cellX + 5, partyHeaderTop + 8,
+              Math.max(10, partyCellW - 10), partyHeaderH - 16,
+              { size: 8, bold: true, color: TEXT }
+            );
+            addManagedTag(name, `PARTY_${index}_NAME`);
+          }
+        });
 
-      const identityBox = addFilledRect(
-        slide, identityX, identityTop, identityW, identityH, "#F8F1F1", "#E4DADA"
-      );
-      addManagedTag(identityBox, "ISSUE_IDENTITY_BOX");
+        // Production P2.1 issue identity header.
+        const identityTop = 18;
+        const identityH = 42;
+        const identityW = 292;
 
-      const issueLabel = addText(
-        slide, "ISSUE ID", identityX + 12, identityTop + 5, 64, 12,
-        { size: 7.5, bold: true, color: "#5F5660" }
-      );
-      addManagedTag(issueLabel, "ISSUE_ID_LABEL");
+        const identityBox = addFilledRect(
+          slide, identityX, identityTop, identityW, identityH, "#F8F1F1", "#E4DADA"
+        );
+        addManagedTag(identityBox, "ISSUE_IDENTITY_BOX");
 
-      const issueValue = addText(
-        slide, issue.id, identityX + 12, identityTop + 16, 105, 20,
-        { size: 15, bold: true, color: TEXT }
-      );
-      addManagedTag(issueValue, "ISSUE_ID_VALUE");
+        const issueLabel = addText(
+          slide, "ISSUE ID", identityX + 12, identityTop + 5, 64, 12,
+          { size: 7.5, bold: true, color: "#5F5660" }
+        );
+        addManagedTag(issueLabel, "ISSUE_ID_LABEL");
 
-      const createdValue = addText(
-        slide,
-        `Created ${new Date(issue.createdAt).toLocaleString()}`,
-        identityX + 124, identityTop + 7, identityW - 136, 12,
-        { size: 7.2, color: TEXT }
-      );
-      addManagedTag(createdValue, "ISSUE_CREATED_VALUE");
+        const issueValue = addText(
+          slide, issue.id, identityX + 12, identityTop + 16, 105, 20,
+          { size: 15, bold: true, color: TEXT }
+        );
+        addManagedTag(issueValue, "ISSUE_ID_VALUE");
 
-      if (issue.updatedAt) {
-        const updatedValue = addText(
+        const createdValue = addText(
           slide,
-          `Updated ${new Date(issue.updatedAt).toLocaleString()}`,
-          identityX + 124, identityTop + 23, identityW - 136, 12,
+          `Created ${new Date(issue.createdAt).toLocaleString()}`,
+          identityX + 124, identityTop + 7, identityW - 136, 12,
           { size: 7.2, color: TEXT }
         );
-        addManagedTag(updatedValue, "ISSUE_UPDATED_VALUE");
-      }
+        addManagedTag(createdValue, "ISSUE_CREATED_VALUE");
 
-      // Issue description
-      const descHeader = addFilledRect(slide, descX, pageTop, descW, 32, NAVY, NAVY);
-      addManagedTag(descHeader, "DESC_HEADER");
-      const descHeaderText = addText(slide, "ISSUE DESCRIPTION", descX + 18, pageTop + 7, descW - 36, 18, {
-        size: 9.5, bold: true, color: WHITE
-      });
-      addManagedTag(descHeaderText, "DESC_HEADER_TEXT");
-
-      const descBody = addFilledRect(slide, descX, bodyTop, descW, bodyH, WHITE, GRID);
-      addManagedTag(descBody, "DESC_BODY");
-      const descText = addText(slide, issue.description, descX + 20, bodyTop + 16, descW - 40, 60, {
-        size: 10.5, color: TEXT
-      });
-      addManagedTag(descText, "DESC_TEXT");
-
-      // 50/50 vertical Area / Room strip
-      const stripBody = addFilledRect(slide, stripX, bodyTop, stripW, bodyH, WHITE, GRID);
-      addManagedTag(stripBody, "LOCATION_BODY");
-      const half = bodyH / 2;
-      const divider = addThinRect(slide, stripX, bodyTop + half, stripW, 0.8, GRID);
-      addManagedTag(divider, "LOCATION_DIVIDER");
-
-      const rotatedW = Math.max(60, half - 34);
-      const rotatedH = 20;
-      const centerX = stripX + stripW / 2;
-
-      const area = addText(
-        slide, issue.areaCode,
-        centerX - rotatedW / 2, bodyTop + half / 2 - rotatedH / 2,
-        rotatedW, rotatedH, { size: 9.5, bold: true, color: TEXT }
-      );
-      area.rotation = 270;
-      addManagedTag(area, "AREA_TEXT");
-
-      const room = addText(
-        slide, issue.roomSpace,
-        centerX - rotatedW / 2, bodyTop + half + half / 2 - rotatedH / 2,
-        rotatedW, rotatedH, { size: 9.5, bold: true, color: TEXT }
-      );
-      room.rotation = 270;
-      addManagedTag(room, "ROOM_TEXT");
-
-      // Reference Images: HEADER + BORDER ONLY.
-      const refHeader = addFilledRect(slide, refX, pageTop, refW, 32, NAVY, NAVY);
-      addManagedTag(refHeader, "REF_HEADER");
-      const refHeaderText = addText(slide, "REFERENCE IMAGES", refX + 18, pageTop + 7, refW - 36, 18, {
-        size: 9.5, bold: true, color: WHITE
-      });
-      addManagedTag(refHeaderText, "REF_HEADER_TEXT");
-
-      for (const [role, l, t, w, h] of [
-        ["REF_TOP", refX, bodyTop, refW, 0.8],
-        ["REF_BOTTOM", refX, pageBottom, refW, 0.8],
-        ["REF_LEFT", refX, bodyTop, 0.8, bodyH],
-        ["REF_RIGHT", refX + refW, bodyTop, 0.8, bodyH],
-      ] as const) {
-        const border = addThinRect(slide, l, t, w, h, GRID);
-        addManagedTag(border, role);
-      }
-
-      // Actions
-      const actHeader = addFilledRect(slide, actionsX, pageTop, actionsW, 32, NAVY, NAVY);
-      addManagedTag(actHeader, "ACTIONS_HEADER");
-      const actHeaderText = addText(slide, "ACTIONS", actionsX + 18, pageTop + 7, 120, 18, {
-        size: 9.5, bold: true, color: WHITE
-      });
-      addManagedTag(actHeaderText, "ACTIONS_HEADER_TEXT");
-
-      const overallStatus = computeOverallStatus(issue.actions.map((action) => action.status));
-      const overallText = addText(
-        slide,
-        `Overall: ${overallStatus}`,
-        actionsX + actionsW - 120,
-        pageTop + 7,
-        102,
-        18,
-        { size: 8.5, bold: true, color: overallStatus === "Closed" ? "#DDF4E4" : "#FFD8D8" }
-      );
-      addManagedTag(overallText, "ACTIONS_OVERALL_STATUS");
-
-      const partyW = 78;
-      const statusW = 76;
-      const requiredW = actionsW - partyW - statusW;
-
-      if (issue.actions.length === 0) {
-        const actBody = addFilledRect(slide, actionsX, bodyTop, actionsW, bodyH, WHITE, GRID);
-        addManagedTag(actBody, "ACTIONS_EMPTY_BODY");
-        const noActions = addText(
-          slide,
-          "No actions added.",
-          actionsX + 18,
-          bodyTop + 18,
-          actionsW - 36,
-          24,
-          { size: 10, color: "#6A7C90" }
-        );
-        addManagedTag(noActions, "ACTIONS_EMPTY_TEXT");
-      } else {
-        const rowH = bodyH / issue.actions.length;
-
-        issue.actions.forEach((action, index) => {
-          const rowTop = bodyTop + index * rowH;
-
-          const partyCell = addFilledRect(slide, actionsX, rowTop, partyW, rowH, WHITE, GRID);
-          addManagedTag(partyCell, `ACTION_${index}_PARTY_CELL`);
-          const partyText = addText(
-            slide, action.party,
-            actionsX + 10, rowTop + 10, partyW - 20, Math.max(24, rowH - 20),
-            { size: 9.5, bold: true, color: TEXT }
+        if (issue.updatedAt) {
+          const updatedValue = addText(
+            slide,
+            `Updated ${new Date(issue.updatedAt).toLocaleString()}`,
+            identityX + 124, identityTop + 23, identityW - 136, 12,
+            { size: 7.2, color: TEXT }
           );
-          addManagedTag(partyText, `ACTION_${index}_PARTY_TEXT`);
+          addManagedTag(updatedValue, "ISSUE_UPDATED_VALUE");
+        }
 
-          const requiredCell = addFilledRect(
-            slide, actionsX + partyW, rowTop, requiredW, rowH, WHITE, GRID
-          );
-          addManagedTag(requiredCell, `ACTION_${index}_REQUIRED_CELL`);
-          const requiredText = addText(
-            slide, action.required,
-            actionsX + partyW + 12, rowTop + 10, requiredW - 24, Math.max(24, rowH - 20),
-            { size: 9.5, color: TEXT }
-          );
-          addManagedTag(requiredText, `ACTION_${index}_REQUIRED_TEXT`);
-
-          let statusFill = "#EEF1F5";
-          let statusTextColor = "#46586B";
-          switch (action.status.trim().toLowerCase()) {
-            case "open":
-              statusFill = "#FDE8E8";
-              statusTextColor = "#9F1D1D";
-              break;
-            case "in progress":
-              statusFill = "#E5F0FB";
-              statusTextColor = "#185A8B";
-              break;
-            case "pending":
-              statusFill = "#FFF2D8";
-              statusTextColor = "#8A5A00";
-              break;
-            case "closed":
-              statusFill = "#E6F5EA";
-              statusTextColor = "#27663A";
-              break;
-          }
-
-          const statusCell = addFilledRect(
-            slide, actionsX + partyW + requiredW, rowTop, statusW, rowH, statusFill, GRID
-          );
-          addManagedTag(statusCell, `ACTION_${index}_STATUS_CELL`);
-          const statusText = addText(
-            slide, action.status,
-            actionsX + partyW + requiredW + 8,
-            rowTop + 10,
-            statusW - 16,
-            Math.max(24, rowH - 20),
-            { size: 9.5, bold: true, color: statusTextColor }
-          );
-          addManagedTag(statusText, `ACTION_${index}_STATUS_TEXT`);
+        // Issue description
+        const descHeader = addFilledRect(slide, descX, pageTop, descW, 32, NAVY, NAVY);
+        addManagedTag(descHeader, "DESC_HEADER");
+        const descHeaderText = addText(slide, "ISSUE DESCRIPTION", descX + 18, pageTop + 7, descW - 36, 18, {
+          size: 9.5, bold: true, color: WHITE
         });
-      }
+        addManagedTag(descHeaderText, "DESC_HEADER_TEXT");
 
-      await context.sync();
+        const descBody = addFilledRect(slide, descX, bodyTop, descW, bodyH, WHITE, GRID);
+        addManagedTag(descBody, "DESC_BODY");
+        const descText = addText(slide, issue.description, descX + 20, bodyTop + 16, descW - 40, bodyH - 32, {
+          size: 10.5, color: TEXT
+        });
+        addManagedTag(descText, "DESC_TEXT");
+
+        // 50/50 vertical Area / Room strip
+        const stripBody = addFilledRect(slide, stripX, bodyTop, stripW, bodyH, WHITE, GRID);
+        addManagedTag(stripBody, "LOCATION_BODY");
+        const half = bodyH / 2;
+        const divider = addThinRect(slide, stripX, bodyTop + half, stripW, 0.8, GRID);
+        addManagedTag(divider, "LOCATION_DIVIDER");
+
+        const rotatedW = Math.max(60, half - 34);
+        const rotatedH = 20;
+        const centerX = stripX + stripW / 2;
+
+        const area = addText(
+          slide, issue.areaCode,
+          centerX - rotatedW / 2, bodyTop + half / 2 - rotatedH / 2,
+          rotatedW, rotatedH, { size: 9.5, bold: true, color: TEXT }
+        );
+        area.rotation = 270;
+        addManagedTag(area, "AREA_TEXT");
+
+        const room = addText(
+          slide, issue.roomSpace,
+          centerX - rotatedW / 2, bodyTop + half + half / 2 - rotatedH / 2,
+          rotatedW, rotatedH, { size: 9.5, bold: true, color: TEXT }
+        );
+        room.rotation = 270;
+        addManagedTag(room, "ROOM_TEXT");
+
+        // Reference Images: HEADER + BORDER ONLY.
+        const refHeader = addFilledRect(slide, refX, pageTop, refW, 32, NAVY, NAVY);
+        addManagedTag(refHeader, "REF_HEADER");
+        const refHeaderText = addText(slide, "REFERENCE IMAGES", refX + 18, pageTop + 7, refW - 36, 18, {
+          size: 9.5, bold: true, color: WHITE
+        });
+        addManagedTag(refHeaderText, "REF_HEADER_TEXT");
+
+        for (const [role, l, t, w, h] of [
+          ["REF_TOP", refX, bodyTop, refW, 0.8],
+          ["REF_BOTTOM", refX, pageBottom, refW, 0.8],
+          ["REF_LEFT", refX, bodyTop, 0.8, bodyH],
+          ["REF_RIGHT", refX + refW, bodyTop, 0.8, bodyH],
+        ] as const) {
+          const border = addThinRect(slide, l, t, w, h, GRID);
+          addManagedTag(border, role);
+        }
+
+        // Actions
+        const actHeader = addFilledRect(slide, actionsX, pageTop, actionsW, 32, NAVY, NAVY);
+        addManagedTag(actHeader, "ACTIONS_HEADER");
+        const actHeaderText = addText(slide, "ACTIONS", actionsX + 18, pageTop + 7, 120, 18, {
+          size: 9.5, bold: true, color: WHITE
+        });
+        addManagedTag(actHeaderText, "ACTIONS_HEADER_TEXT");
+
+        const overallStatus = computeOverallStatus(issue.actions.map((action) => action.status));
+        const overallText = addText(
+          slide,
+          `Overall: ${overallStatus}`,
+          actionsX + actionsW - 120,
+          pageTop + 7,
+          102,
+          18,
+          { size: 8.5, bold: true, color: overallStatus === "Closed" ? "#DDF4E4" : "#FFD8D8" }
+        );
+        addManagedTag(overallText, "ACTIONS_OVERALL_STATUS");
+
+        const partyW = 78;
+        const statusW = 76;
+        const requiredW = actionsW - partyW - statusW;
+
+        if (issue.actions.length === 0) {
+          const actBody = addFilledRect(slide, actionsX, bodyTop, actionsW, bodyH, WHITE, GRID);
+          addManagedTag(actBody, "ACTIONS_EMPTY_BODY");
+          const noActions = addText(
+            slide,
+            "No actions added.",
+            actionsX + 18,
+            bodyTop + 18,
+            actionsW - 36,
+            24,
+            { size: 10, color: "#6A7C90" }
+          );
+          addManagedTag(noActions, "ACTIONS_EMPTY_TEXT");
+        } else {
+          // Keep rows readable. Every action remains in metadata and the full register.
+          const visibleActions = issue.actions.slice(0, 10);
+          const overflow = issue.actions.length - visibleActions.length;
+          const rowH = (bodyH - (overflow ? 32 : 0)) / visibleActions.length;
+
+          visibleActions.forEach((action, index) => {
+            const rowTop = bodyTop + index * rowH;
+
+            const partyCell = addFilledRect(slide, actionsX, rowTop, partyW, rowH, WHITE, GRID);
+            addManagedTag(partyCell, `ACTION_${index}_PARTY_CELL`);
+            const partyText = addText(
+              slide, action.party,
+              actionsX + 10, rowTop + 10, partyW - 20, Math.max(24, rowH - 20),
+              { size: 9.5, bold: true, color: TEXT }
+            );
+            addManagedTag(partyText, `ACTION_${index}_PARTY_TEXT`);
+
+            const requiredCell = addFilledRect(
+              slide, actionsX + partyW, rowTop, requiredW, rowH, WHITE, GRID
+            );
+            addManagedTag(requiredCell, `ACTION_${index}_REQUIRED_CELL`);
+            const requiredText = addText(
+              slide, action.required,
+              actionsX + partyW + 12, rowTop + 10, requiredW - 24, Math.max(24, rowH - 20),
+              { size: 9.5, color: TEXT }
+            );
+            addManagedTag(requiredText, `ACTION_${index}_REQUIRED_TEXT`);
+
+            let statusFill = "#EEF1F5";
+            let statusTextColor = "#46586B";
+            switch (action.status.trim().toLowerCase()) {
+              case "open":
+                statusFill = "#FDE8E8";
+                statusTextColor = "#9F1D1D";
+                break;
+              case "in progress":
+                statusFill = "#E5F0FB";
+                statusTextColor = "#185A8B";
+                break;
+              case "pending":
+                statusFill = "#FFF2D8";
+                statusTextColor = "#8A5A00";
+                break;
+              case "closed":
+                statusFill = "#E6F5EA";
+                statusTextColor = "#27663A";
+                break;
+            }
+
+            const statusCell = addFilledRect(
+              slide, actionsX + partyW + requiredW, rowTop, statusW, rowH, statusFill, GRID
+            );
+            addManagedTag(statusCell, `ACTION_${index}_STATUS_CELL`);
+            const statusText = addText(
+              slide, action.status,
+              actionsX + partyW + requiredW + 8,
+              rowTop + 10,
+              statusW - 16,
+              Math.max(24, rowH - 20),
+              { size: 9.5, bold: true, color: statusTextColor }
+            );
+            addManagedTag(statusText, `ACTION_${index}_STATUS_TEXT`);
+          });
+          if (overflow) {
+            const note = addText(slide, `+ ${overflow} more action(s). See Actions tab / full Action Register.`,
+              actionsX + 8, pageBottom - 28, actionsW - 16, 24, { size: 8, bold: true });
+            addManagedTag(note, "ACTIONS_OVERFLOW_NOTE");
+          }
+        }
+
+      });
+      // New shapes are confirmed before touching the old layout or stored issue.
+      originalSlide.tags.add(TAGS.app, TRUE);
+      originalSlide.tags.add(TAGS.schemaVersion, SCHEMA_VERSION);
+      originalSlide.tags.add(TAGS.issueJson, JSON.stringify(issue));
+      for (const shape of previous) shape.delete();
+      try {
+        await context.sync();
+      } catch (error) {
+        throw new Error(`The replacement layout was created, but final cleanup/save failed. Inspect this slide and reload before retrying. ${String(error)}`);
+      }
     });
   }
 
@@ -959,18 +989,8 @@ export class PowerPointService {
         const json = readTag(slide.tags.items, TAGS.issueJson);
         if (!json) return;
 
-        try {
-          const issue = JSON.parse(json) as Issue;
-          if (issue && issue.id) {
-            records.push({
-              slideId: slide.id,
-              slideNumber: index + 1,
-              issue,
-            });
-          }
-        } catch {
-          // Skip invalid issue metadata; the current-slide workflow reports it directly.
-        }
+        const issue = parseIssueMetadata(json, readTag(slide.tags.items, TAGS.schemaVersion), `Slide ${index + 1}`);
+        records.push({ slideId: slide.id, slideNumber: index + 1, issue });
       });
 
       return records;
@@ -1032,7 +1052,7 @@ export class PowerPointService {
           await context.sync();
         });
 
-        await this.renderSelectedIssue(record.issue);
+        await this.renderSelectedIssue(record.issue, record.slideId);
         result.updated += 1;
       } catch (error) {
         result.failed += 1;
@@ -1081,33 +1101,39 @@ export class PowerPointService {
         .filter((slide: any) => readTag(slide.tags.items, TAGS.summary) === TRUE)
         .map((slide: any) => slide.id);
 
-      existingSummaryIds.forEach((id: string) => slides.getItem(id).delete());
-      await context.sync();
-
       const generatedSlides: any[] = [];
+      try {
+        const dashboard = await addCleanSummarySlide(context, "DASHBOARD", generatedSlides);
+        buildDashboardSlide(dashboard, issues);
 
-      const dashboard = await addCleanSummarySlide(context, "DASHBOARD");
-      buildDashboardSlide(dashboard, issues);
-      generatedSlides.push(dashboard);
+        for (let index = 0; index < pages.length; index += 1) {
+          const page = pages[index];
+          if (!page) continue;
 
-      for (let index = 0; index < pages.length; index += 1) {
-        const page = pages[index];
-        if (!page) continue;
+          const registerSlide = await addCleanSummarySlide(context, "REGISTER", generatedSlides);
+          buildRegisterSlide(registerSlide, page, index + 1, pages.length);
+        }
 
-        const registerSlide = await addCleanSummarySlide(context, "REGISTER");
-        buildRegisterSlide(registerSlide, page, index + 1, pages.length);
-        generatedSlides.push(registerSlide);
+        await context.sync();
+        generatedSlides.forEach((slide, index) => slide.moveTo(index));
+        await context.sync();
+      } catch (error) {
+        try {
+          for (const slide of generatedSlides) slide.delete();
+          await context.sync();
+        } catch {
+          throw new Error(`Summary failed; previous summary retained, but temporary pages may remain. ${String(error)}`);
+        }
+        throw error;
+      }
+      // Commit only after all new summary pages were built and moved successfully.
+      existingSummaryIds.forEach((id: string) => slides.getItem(id).delete());
+      try {
+        await context.sync();
+      } catch (error) {
+        throw new Error(`New summaries were created, but removing the old summary failed. Inspect summary pages before retrying. ${String(error)}`);
       }
 
-      await context.sync();
-
-      // Summary must always be the first pages in the presentation.
-      // Dashboard = slide 1, register pages follow in their generated order.
-      generatedSlides.forEach((slide, index) => {
-        slide.moveTo(index);
-      });
-
-      await context.sync();
     });
 
     return {

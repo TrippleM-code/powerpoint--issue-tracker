@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  "outputDirectory": "production/dist",
   "framework": "vite",
   "headers": [
     {
@@ -114,5 +114,6 @@
         }
       ]
     }
-  ]
+  ],
+  "installCommand": "npm ci --prefix production"
 }
