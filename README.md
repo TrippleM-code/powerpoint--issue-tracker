@@ -41,6 +41,12 @@ If replacing a GitHub checkout, commit the removed duplicate directories as dele
 
 ## Corrections and acceptance
 
-Read [the release notes](production/docs/P4_8_RELEASE.md) for fixes, test evidence, limitations and the PowerPoint acceptance checklist. The original alpha ZIP stays in `archive/`; legacy `/taskpane.html` and `/v2/taskpane.html` assets are retained under `production/public/` unchanged. They are compatibility artifacts, not the repaired production UI.
+Read [the release notes](production/docs/P4_8_RELEASE.md) for fixes, test evidence, limitations and the PowerPoint acceptance checklist.
+
+## Repository cleanup
+
+Only the current P4.8 manifest remains in `production/manifests/`. Superseded development manifests, milestone-specific P1–P4.7 notes and the old alpha reference ZIP were removed from the current tree on 2026-09-24. They remain recoverable in Git history at commit `ed8953fc408871dd7d4f8bf78cc9760643fd0ad2`. The changelog, architecture, data model, security guidance, tests and current release evidence are retained.
+
+Legacy `/p4-2.html` through `/p4-5.html`, `/taskpane.html` and `/v2/taskpane.html` remain available for previously installed manifests. Do not remove these compatibility routes until existing installations have been checked. The working app source, dependencies, build configuration, hosted manifest and runtime files are unchanged by this cleanup. The historical P4.8 release report describes the original release contents before cleanup.
 
 Data stays in presentation tags and Office document settings; no backend, new permission scope, paid API, or AI service was introduced.
