@@ -8,7 +8,7 @@ IssueFlow is a static Office.js PowerPoint add-in hosted on Vercel over HTTPS. I
 - Issue JSON is stored in slide tags; settings and resized logos use Office document settings. Reference numbers are ordinary slide text boxes. They travel with the presentation and are not encrypted separately by this app.
 - No application backend, database, credential store, AI service or application telemetry endpoint is implemented. Hosting/CDN requests still disclose ordinary request metadata to the hosting providers. Office/OneDrive sharing and storage follow the user's Microsoft configuration.
 - Presentation collaborators who can edit the file can change its metadata. Tags are not a security boundary or immutable audit trail.
-- User-facing strings use DOM text operations or escaped HTML. Logo inputs are limited to PNG/JPEG and resized before storage. Remote logo URLs are not accepted as settings data.
+- User-facing strings use DOM text operations or escaped HTML. Logo uploads accept PNG/JPEG/WebP and are resized to PNG before storage. Persisted logos accept only embedded PNG/JPEG/WebP base64 data URLs up to 1 MiB of encoded text; remote and SVG logo sources are rejected in current and retained V2 clients.
 
 ## Operational controls
 

@@ -9,9 +9,11 @@
 
 This is an Office.js web add-in. Windows COM code, installer operations, registry changes and native local backup are not included. Summary refresh does not create backups. Use PowerPoint Save a Copy or your organization's version history for web-version backups.
 
+Security review found a low-severity external-logo tracking path in stored metadata. This release rejects remote/unsupported logo sources in current and retained V2 clients; existing embedded raster logos are preserved.
+
 ## Verification
 
-72 automated tests passed, including dashboard comparisons, manual reference preservation, stale edits and a change detected during staged rendering. ESLint and TypeScript/Vite production build passed. These tests use Office mocks; they do not replace a live PowerPoint acceptance test.
+104 automated tests passed, including dashboard comparisons, manual reference preservation, stale edits, a change detected during staged rendering, and stored-logo security regressions. ESLint and TypeScript/Vite production build passed. These tests use Office mocks; they do not replace a live PowerPoint acceptance test.
 
 ## PowerPoint acceptance — use a copy
 

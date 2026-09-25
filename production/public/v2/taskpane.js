@@ -197,21 +197,40 @@ async function getParties() {
 }
 
 
+// This retained classic-script client cannot import the TypeScript app helper.
+// Keep the same policy; logo-data.test.ts exercises both implementations.
+function normalizeLogoDataUrl(value) {
+  if (typeof value !== "string" || value.length > 1024 * 1024) return undefined;
+  const logo = value.trim();
+  return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(logo)
+    ? logo : undefined;
+}
+
+function normalizePartyLogos(value) {
+  const logos = Object.create(null);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return logos;
+  for (const [party, source] of Object.entries(value)) {
+    const logo = normalizeLogoDataUrl(source);
+    if (logo) logos[party] = logo;
+  }
+  return logos;
+}
+
 async function getPartyLogos() {
   return PowerPoint.run(async context => {
     const value = await getTagValue(context.presentation.tags, TAG_PARTY_LOGOS, context);
     try {
       const parsed = JSON.parse(value || "{}");
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      return normalizePartyLogos(parsed);
     } catch {
-      return {};
+      return Object.create(null);
     }
   });
 }
 
 async function savePartyLogos(logos) {
   await PowerPoint.run(async context => {
-    context.presentation.tags.add(TAG_PARTY_LOGOS, JSON.stringify(logos || {}));
+    context.presentation.tags.add(TAG_PARTY_LOGOS, JSON.stringify(normalizePartyLogos(logos)));
     await context.sync();
   });
 }

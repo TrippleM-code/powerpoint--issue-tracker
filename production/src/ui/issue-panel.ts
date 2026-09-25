@@ -675,7 +675,7 @@ async function persistSettings(message: string): Promise<void> {
 
 
 async function compressLogo(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
     throw new Error("Choose a supported image file.");
   }
 

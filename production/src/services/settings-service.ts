@@ -1,4 +1,5 @@
 import type { Party } from "../domain/models";
+import { normalizeLogoDataUrl } from "../domain/logo-data";
 
 declare const Office: any;
 
@@ -51,8 +52,7 @@ function normalizeParties(values: unknown): Party[] {
       const candidate = value as Record<string, unknown>;
       name = String(candidate.name ?? "").trim();
       id = String(candidate.id ?? "").trim() || slugId(name, index);
-      const logo = String(candidate.logoDataUrl ?? "").trim();
-      logoDataUrl = logo || undefined;
+      logoDataUrl = normalizeLogoDataUrl(candidate.logoDataUrl);
     }
 
     if (!name) return;
