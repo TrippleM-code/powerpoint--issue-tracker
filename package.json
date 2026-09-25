@@ -1,7 +1,7 @@
 {
   "name": "issueflow-repository",
   "private": true,
-  "version": "1.0.0-p4.8",
+  "version": "1.0.0-p4.8.1",
   "type": "module",
   "scripts": {
     "setup": "npm ci --prefix production",

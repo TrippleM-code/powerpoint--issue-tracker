@@ -47,6 +47,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("panel regressions", () => {
+  it.each(["saveIssueBtn", "refreshSheetBtn", "saveActionBtn"])("blocks stale data via %s and retains the draft", async (id) => {
+    await start(); control("description").value = "My unsaved draft";
+    mock.readSelectedIssueState.mockResolvedValue({ slideId: "slide-A", issue: { ...base, description: "Saved elsewhere" } });
+    click(id);
+    await vi.waitFor(() => expect(control("statusBanner").textContent).toMatch(/changed since it was loaded/));
+    expect(control("description").value).toBe("My unsaved draft");
+    expect(mock.saveSelectedIssue).not.toHaveBeenCalled();
+    expect(mock.renderSelectedIssue).not.toHaveBeenCalled();
+  });
   it("rejects Confirm Remove after a slide switch", async () => {
     await start();
     button("#actionList", "Remove").click();

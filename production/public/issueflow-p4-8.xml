@@ -3,17 +3,17 @@
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
            xsi:type="TaskPaneApp">
   <Id>3f8b99b8-9bb9-46ca-b9d3-e1ee4b928f4b</Id>
-  <Version>1.0.0.8</Version>
+  <Version>1.0.0.9</Version>
   <ProviderName>Daily Painkiller</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="IssueFlow Production Dev P4.8"/>
+  <DisplayName DefaultValue="IssueFlow P4.8.1"/>
   <Description DefaultValue="Structured PowerPoint issue and action management."/>
   <IconUrl DefaultValue="https://powerpoint-issue-tracker.vercel.app/icon-32.png"/>
   <SupportUrl DefaultValue="https://dailypainkiller.com/"/>
   <Hosts><Host Name="Presentation"/></Hosts>
   <Requirements><Sets DefaultMinVersion="1.4"><Set Name="PowerPointApi" MinVersion="1.4"/></Sets></Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://powerpoint-issue-tracker.vercel.app/index.html?v=p4.8"/>
+    <SourceLocation DefaultValue="https://powerpoint-issue-tracker.vercel.app/index.html?v=p4.8.1"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

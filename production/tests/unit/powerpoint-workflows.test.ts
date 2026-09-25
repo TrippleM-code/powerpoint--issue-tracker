@@ -49,6 +49,70 @@ function host() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PowerPoint service regression boundaries", () => {
+  it("keeps typed reference boxes through refresh and bulk settings, with no covering shapes", async () => {
+    const h = host(); const a = h.addSlide("A");
+    const service = new PowerPointService();
+    await service.renderSelectedIssue(issue, "A");
+    const fields = () => a.shapes.items.filter((shape: any) => shape.tags.items.some((tag: any) => tag.key === TAGS.referenceRole));
+    const originals = [...fields()];
+    expect(originals).toHaveLength(3);
+    expect(originals.map((shape: any) => shape.text)).toEqual(["", "", ""]);
+    originals.forEach((shape: any, index: number) => { shape.text = `Ref-${index}/2026`; });
+    const updated = { ...issue, updatedAt: "2026-09-26T12:30:00Z" };
+    await service.renderSelectedIssue(updated, "A");
+    expect((await service.applySettingsToAllIssueSlides()).failed).toBe(0);
+    expect(fields()).toEqual(originals);
+    originals.forEach((field: any, index: number) => {
+      expect(field.text).toBe(`Ref-${index}/2026`);
+      expect(field.delete).not.toHaveBeenCalled();
+      const covering = a.shapes.items.filter((shape: any) => shape !== field &&
+        shape.left < field.left + field.width && shape.left + shape.width > field.left &&
+        shape.top < field.top + field.height && shape.top + shape.height > field.top);
+      expect(covering).toHaveLength(0);
+    });
+    for (const label of ["SOI", "NOV", "COI/CVI"]) {
+      expect(a.shapes.items.filter((shape: any) => shape.text === label)).toHaveLength(1);
+    }
+    for (const prefix of ["Created ", "Updated "]) {
+      const date = a.shapes.items.find((shape: any) => shape.text.startsWith(prefix));
+      expect(date).toBeDefined(); expect(date.top + date.height).toBeLessThan(76);
+    }
+    originals[1].delete();
+    await service.renderSelectedIssue(updated, "A");
+    expect(fields()).toHaveLength(3);
+    expect(fields().filter((shape: any) => shape.text === "")).toHaveLength(1);
+    expect(fields()).toContain(originals[0]); expect(fields()).toContain(originals[2]);
+  });
+  it("retains typed references when a refresh fails", async () => {
+    const h = host(); const a = h.addSlide("A");
+    await new PowerPointService().renderSelectedIssue(issue, "A");
+    const reference = a.shapes.items.find((shape: any) => shape.tags.items.some((tag: any) => tag.key === TAGS.referenceRole));
+    reference.text = "SOI-keep"; h.state.failShapes = true;
+    await expect(new PowerPointService().renderSelectedIssue(issue, "A")).rejects.toThrow(/Injected/);
+    expect(reference.text).toBe("SOI-keep"); expect(reference.delete).not.toHaveBeenCalled();
+  });
+  it("rejects a change during web staging and removes only the staged shapes", async () => {
+    const h = host(); const a = h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(issue) });
+    const old = a.shapes.addTextBox("previous layout"); old.tags.add(TAGS.managed, "TRUE");
+    const newer = { ...issue, description: "Other editor's change" };
+    h.state.afterSync = () => {
+      if (a.shapes.items.length > 1) a.tags.add(TAGS.issueJson, JSON.stringify(newer));
+    };
+    await expect(new PowerPointService().renderSelectedIssue(issue, "A", issue)).rejects.toThrow(/changed since it was loaded/);
+    expect(old.delete).not.toHaveBeenCalled();
+    expect(a.shapes.items).toEqual([old]);
+    expect(a.tags.items.find((tag: any) => tag.key === TAGS.issueJson).value).toBe(JSON.stringify(newer));
+  });
+  it("rejects a changed issue even when its timestamp was not updated", async () => {
+    const h = host(); const newer = { ...issue, description: "Newer saved value" };
+    const a = h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(newer) });
+    await expect(new PowerPointService().saveSelectedIssue({ ...issue, description: "Stale draft" }, "A", issue)).rejects.toThrow(/changed since it was loaded/);
+    expect(a.tags.items.find((t: any) => t.key === TAGS.issueJson).value).toBe(JSON.stringify(newer));
+  });
+  it("rejects a blank-slide draft if another editor created an issue there", async () => {
+    const h = host(); h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(issue) });
+    await expect(new PowerPointService().renderSelectedIssue(issue, "A", null)).rejects.toThrow(/changed since it was loaded/);
+  });
   it("rejects a stale selected slide before writing", async () => {
     const h = host(); h.addSlide("A"); const b = h.addSlide("B"); h.state.selected = "B";
     await expect(new PowerPointService().saveSelectedIssue(issue, "A")).rejects.toThrow(/Selected slide changed/);
@@ -99,20 +163,53 @@ describe("PowerPoint service regression boundaries", () => {
     await expect(new PowerPointService().generateSummary()).rejects.toThrow(/Injected/);
     expect(old.delete).not.toHaveBeenCalled(); expect(h.slides).toHaveLength(2);
   });
-  it("paginates all actions and replaces summaries without modifying issue slides", async () => {
+  it("paginates current actions and replaces previous summaries without modifying issue slides", async () => {
     const h = host();
     const many = { ...issue, actions: Array.from({ length: 18 }, (_, i) => ({ id: `a${i}`, party: "MEP", required: `Task ${i}`, status: "Open", createdAt: issue.createdAt })) };
     const a = h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(many) });
     const old = h.addSlide("summary", { [TAGS.summary]: "TRUE" });
-    expect(await new PowerPointService().generateSummary()).toEqual({ slidesCreated: 3, issueCount: 1 });
+    expect(await new PowerPointService().generateSummary()).toEqual({ slidesCreated: 3, issueCount: 1, replacedCount: 1 });
     expect(old.delete).toHaveBeenCalledOnce(); expect(a.delete).not.toHaveBeenCalled();
-    expect(h.slides.at(-1)).toBe(a);
+    expect(h.slides).not.toContain(old);
     expect(h.slides.flatMap(s => s.shapes.items).filter(s => s.text.startsWith("Task "))).toHaveLength(18);
     await new PowerPointService().generateSummary();
     expect(h.slides).toHaveLength(4);
+    expect(h.slides.filter(s => s.tags.items.some((t: any) => t.key === TAGS.summaryArchived && t.value === "TRUE"))).toHaveLength(0);
   });
   it("reports the affected slide instead of crashing or skipping malformed data", async () => {
     const h = host(); h.addSlide("A", { [TAGS.issueJson]: '{"id":"BAD"}' });
     await expect(new PowerPointService().getSummaryStats()).rejects.toThrow(/Slide 1: invalid IssueFlow metadata/);
+  });
+  it("leaves existing archives intact while replacing current summaries", async () => {
+    const h = host(); h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(issue) });
+    const archive = h.addSlide("archive", { [TAGS.summary]: "TRUE", [TAGS.summaryArchived]: "TRUE" });
+    const note = archive.shapes.addTextBox("Meeting note");
+    await new PowerPointService().generateSummary();
+    await new PowerPointService().generateSummary();
+    expect(archive.delete).not.toHaveBeenCalled();
+    expect(archive.shapes.items).toEqual([note]);
+    expect((await new PowerPointService().getSummaryStats()).issueCount).toBe(1);
+  });
+  it("compares persisted card counts across service instances and resets changes on the next refresh", async () => {
+    const h = host();
+    const openIssue = { ...issue, actions: [{ id: "action", party: "MEP", required: "Fix", status: "Open", createdAt: issue.createdAt }] };
+    const a = h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(openIssue) });
+    await new PowerPointService().generateSummary();
+    expect(h.slides[0].shapes.items.some((s: any) => s.text.includes("First comparison baseline"))).toBe(true);
+    expect(JSON.parse(h.slides[0].tags.items.find((t: any) => t.key === TAGS.summaryCounts).value)).toEqual([1,1,0,0,0,0,1,1,1]);
+    a.tags.add(TAGS.issueJson, JSON.stringify({ ...openIssue, actions: [{ ...openIssue.actions[0], status: "Closed" }] }));
+    await new PowerPointService().generateSummary();
+    const changes = h.slides[0].shapes.items.map((s: any) => s.text);
+    expect(changes.filter((text: string) => text === "−1")).toHaveLength(3);
+    expect(changes.filter((text: string) => text === "+1")).toHaveLength(1);
+    expect(changes.filter((text: string) => text === "—")).toHaveLength(5);
+    await new PowerPointService().generateSummary();
+    expect(h.slides[0].shapes.items.filter((s: any) => s.text === "—")).toHaveLength(9);
+  });
+  it.each(["broken", "[1]", "[1,1,0,0,0,0,1,-1,1]"])("treats invalid comparison metadata as a new baseline: %s", async (snapshot) => {
+    const h = host(); h.addSlide("A", { [TAGS.issueJson]: JSON.stringify(issue) });
+    h.addSlide("old", { [TAGS.summary]: "TRUE", [TAGS.summaryType]: "DASHBOARD", [TAGS.summaryCounts]: snapshot });
+    await new PowerPointService().generateSummary();
+    expect(h.slides[0].shapes.items.some((s: any) => s.text.includes("First comparison baseline"))).toBe(true);
   });
 });

@@ -304,3 +304,5 @@ button.compact { padding:10px 14px; white-space:nowrap; }
   align-items:center;
 }
 .navigate-row input { min-width:0; }
+
+.brand-icon { vertical-align: middle; margin-right: 6px; }

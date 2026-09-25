@@ -1,3 +1,4 @@
+import { issueRevision, CONFLICT_MESSAGE } from "../domain/issue-revision";
 import type { ActionItem, Issue, Party } from "../domain/models";
 import { isDuplicateIssueId, normalizeIssueId, validateIssueDraft } from "../domain/validation";
 import { statusCssClass } from "../domain/status";
@@ -221,7 +222,7 @@ function buildIssueFromForm(): Issue {
 }
 
 async function persistIssue(issue: Issue, slideId: string, message: string): Promise<void> {
-  await service.saveSelectedIssue(issue, slideId);
+  await service.saveSelectedIssue(issue, slideId, currentIssue);
   populate(issue);
   showBanner(message, "success");
 }
@@ -229,7 +230,10 @@ async function persistIssue(issue: Issue, slideId: string, message: string): Pro
 async function ensurePanelMatchesSelectedSlide(): Promise<void> {
   const state = await service.readSelectedIssueState();
 
-  if (state.slideId === currentSlideId) return;
+  if (state.slideId === currentSlideId) {
+    if (issueRevision(state.issue) !== issueRevision(currentIssue)) throw new Error(CONFLICT_MESSAGE);
+    return;
+  }
 
   currentSlideId = state.slideId;
   populate(state.issue);
@@ -348,7 +352,7 @@ async function refreshSheet(): Promise<void> {
     await ensurePanelMatchesSelectedSlide();
     const issue = buildIssueFromForm();
     await ensureIssueIdCanBeSaved(issue);
-    await service.renderSelectedIssue(issue, currentSlideId!);
+    await service.renderSelectedIssue(issue, currentSlideId!, currentIssue);
     populate(issue);
     showBanner("Issue sheet refreshed. Manual reference content was preserved.", "success");
   } catch (error) {
@@ -456,7 +460,7 @@ async function saveAction(): Promise<void> {
       updatedAt: now,
     };
 
-    await service.renderSelectedIssue(issue, currentSlideId!);
+    await service.renderSelectedIssue(issue, currentSlideId!, currentIssue);
     populate(issue);
     resetActionEditor();
     showBanner(editingId ? "Action updated." : "Action added.", "success");
@@ -492,7 +496,7 @@ async function removeAction(actionId: string): Promise<void> {
       updatedAt: now,
     };
 
-    await service.renderSelectedIssue(issue, currentSlideId!);
+    await service.renderSelectedIssue(issue, currentSlideId!, currentIssue);
     populate(issue);
     resetActionEditor();
     showBanner("Action removed.", "success");
@@ -855,7 +859,7 @@ async function generateSummary(): Promise<void> {
     const result = await service.generateSummary();
     await refreshSummaryPreview();
     showBanner(
-      `Summary refreshed: ${result.slidesCreated} generated slide(s) from ${result.issueCount} issue(s).`,
+      `Summary refreshed: ${result.slidesCreated} generated slide(s) from ${result.issueCount} issue(s).` + " Dashboard changes compare with the previous refresh. Keep permanent notes on ordinary slides.",
       "success"
     );
   } catch (error) {

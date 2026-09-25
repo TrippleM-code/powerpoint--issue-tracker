@@ -1,4 +1,4 @@
-# IssueFlow for PowerPoint — P4.8 corrective release
+# IssueFlow for PowerPoint — Web P4.8.1
 
 Revised from GitHub commit `dd7e081bcf0a773c370d67bc481a38ff10d494c5` (P4.7).
 The app manages issue sheets, responsible parties, actions, dashboard and action register inside a PowerPoint presentation.
@@ -35,13 +35,13 @@ Both configurations build the same source. Corresponding `vercel.json` files are
 
 The source ZIP includes the verified `production/dist` output for static HTTPS hosting. Normal repository builds regenerate it; it is ignored by Git.
 
-After the Git-triggered deployment is ready, download `/issueflow-p4-8.xml` from the production host or use `production/manifests/issueflow-production-dev-p4-8.xml`. Sideload it in PowerPoint, reopen the pane and verify the **P4.8** label. For a preview deployment, change `SourceLocation` to that preview's HTTPS `/index.html?v=p4.8` before sideloading.
+After the Git-triggered deployment is ready, download `/issueflow-p4-8.xml` from the production host or use `production/manifests/issueflow-production-dev-p4-8.xml`. Sideload it in PowerPoint, reopen the pane and verify the **Web P4.8.1** label. For a preview deployment, change `SourceLocation` to that preview's HTTPS `/index.html?v=p4.8.1` before sideloading.
 
 If replacing a GitHub checkout, commit the removed duplicate directories as deletions along with the new files. Do not commit `node_modules`, `.env`, or `dist`.
 
 ## Corrections and acceptance
 
-Read [the release notes](production/docs/P4_8_RELEASE.md) for fixes, test evidence, limitations and the PowerPoint acceptance checklist.
+Read [the release notes](production/docs/P4_8_1_WEB_RELEASE.md) for fixes, test evidence, limitations and the PowerPoint acceptance checklist.
 
 ## Repository cleanup
 

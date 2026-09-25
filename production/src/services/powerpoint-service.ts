@@ -1,3 +1,4 @@
+import { issueRevision, CONFLICT_MESSAGE } from "../domain/issue-revision";
 import type { Issue } from "../domain/models";
 import { computeOverallStatus } from "../domain/status";
 import { SCHEMA_VERSION, TAGS } from "../storage/tag-names";
@@ -164,7 +165,25 @@ async function addCleanSummarySlide(context: any, type: string, created: any[]):
   return slide;
 }
 
-function buildDashboardSlide(slide: any, issues: Issue[]): void {
+function readDashboardCounts(json: string | undefined): number[] | null {
+  if (!json) return null;
+  try {
+    const counts: unknown = JSON.parse(json);
+    return Array.isArray(counts) && counts.length === 9 && counts.every(
+      value => Number.isSafeInteger(value) && value >= 0
+    ) ? counts as number[] : null;
+  } catch { return null; }
+}
+
+function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | null): void {
+  const addChange = (value: number, index: number, left: number, top: number, width: number) => {
+    const change = previous ? value - previous[index]! : null;
+    const text = change === null || change === 0 ? "—" : change > 0 ? `+${change}` : `−${Math.abs(change)}`;
+    addText(slide, text, left, top, width, 17, {
+      size: 11, bold: true,
+      color: change === null || change === 0 ? "#63768B" : change > 0 ? "#237A3B" : "#C62828",
+    });
+  };
   const NAVY = "#17344D";
   const GRID = "#D7E1EB";
   const TEXT = "#172538";
@@ -245,6 +264,10 @@ function buildDashboardSlide(slide: any, issues: Issue[]): void {
     color: "#DCE7EF",
   });
 
+  addText(slide, previous ? "Change since previous refresh: + increase / − decrease / — unchanged" : "First comparison baseline: changes appear after the next refresh", 365, 76, 560, 14, {
+    size: 8, color: "#63768B",
+  });
+
   // ===========================================================================
   // 1) OVERALL TRACKING STATUS
   // ===========================================================================
@@ -277,6 +300,8 @@ function buildDashboardSlide(slide: any, issues: Issue[]): void {
       bold: true,
       color: TEXT,
     });
+
+    addChange(value, index, left + 58, 107, 74);
 
     addText(slide, label, left + 14, 128, 116, 11, {
       size: 7.7,
@@ -345,6 +370,10 @@ function buildDashboardSlide(slide: any, issues: Issue[]): void {
     ["Parties with Current Actions", currentActionsByParty.size],
   ];
 
+  slide.tags.add(TAGS.summaryCounts, JSON.stringify([
+    ...overallCards.map(([, value]) => value), ...actionCards.map(([, value]) => value),
+  ]));
+
   actionCards.forEach(([label, value], index) => {
     const left = 40 + index * 298;
 
@@ -356,7 +385,9 @@ function buildDashboardSlide(slide: any, issues: Issue[]): void {
       color: TEXT,
     });
 
-    addText(slide, label, left + 66, 353, 185, 16, {
+    addChange(value, index + 6, left + 64, 353, 65);
+
+    addText(slide, label, left + 132, 352, 130, 28, {
       size: 8.2,
       color: "#63768B",
     });
@@ -639,10 +670,10 @@ export class PowerPointService {
     return state.issue;
   }
 
-  async saveSelectedIssue(issue: Issue, expectedSlideId: string): Promise<void> {
+  async saveSelectedIssue(issue: Issue, expectedSlideId: string, expectedIssue?: Issue | null): Promise<void> {
     validateIssue(issue);
     await PowerPoint.run(async (context: any) => {
-      const slide = await this.getWriteTarget(context, issue, expectedSlideId);
+      const slide = await this.getWriteTarget(context, issue, expectedSlideId, expectedIssue);
       slide.tags.add(TAGS.app, TRUE);
       slide.tags.add(TAGS.schemaVersion, SCHEMA_VERSION);
       slide.tags.add(TAGS.issueJson, JSON.stringify(issue));
@@ -650,7 +681,7 @@ export class PowerPointService {
     });
   }
 
-  private async getWriteTarget(context: any, issue: Issue, expectedSlideId: string): Promise<any> {
+  private async getWriteTarget(context: any, issue: Issue, expectedSlideId: string, expectedIssue?: Issue | null): Promise<any> {
     if (!expectedSlideId) throw new Error("Select and load an issue slide before saving.");
     const selected = await getSelectedSlide(context);
     if (selected.id !== expectedSlideId) throw new Error("Selected slide changed. Reload the issue and try again.");
@@ -660,6 +691,10 @@ export class PowerPointService {
     await context.sync();
     if (readTag(slide.tags.items, TAGS.summary) === TRUE) throw new Error("Select an issue slide, not a generated summary.");
     const json = readTag(slide.tags.items, TAGS.issueJson);
+    if (expectedIssue !== undefined) {
+      const storedIssue = json ? parseIssueMetadata(json, readTag(slide.tags.items, TAGS.schemaVersion), `Slide ${expectedSlideId}`) : null;
+      if (issueRevision(storedIssue) !== issueRevision(expectedIssue)) throw new Error(CONFLICT_MESSAGE);
+    }
     if (json) {
       const stored = parseIssueMetadata(json, readTag(slide.tags.items, TAGS.schemaVersion), `Slide ${expectedSlideId}`);
       if (stored.id.trim().toUpperCase() !== issue.id.trim().toUpperCase()) {
@@ -669,18 +704,19 @@ export class PowerPointService {
     return slide;
   }
 
-  async renderSelectedIssue(issue: Issue, expectedSlideId: string): Promise<void> {
+  async renderSelectedIssue(issue: Issue, expectedSlideId: string, expectedIssue?: Issue | null): Promise<void> {
     validateIssue(issue);
     const presentationSettings = loadSettings();
 
     await PowerPoint.run(async (context: any) => {
-      const originalSlide = await this.getWriteTarget(context, issue, expectedSlideId);
+      const originalSlide = await this.getWriteTarget(context, issue, expectedSlideId, expectedIssue);
+      const baselineJson = readTag(originalSlide.tags.items, TAGS.issueJson);
       const shapes = await loadShapeTags(context, originalSlide);
       const previous = shapes.filter((shape: any) => shape.tags.items.some(
           (tag: any) => tag.key === TAGS.managed && tag.value === TRUE
       ));
 
-      await stageShapes(context, originalSlide, (slide) => {
+      const rollbackStaged = await stageShapes(context, originalSlide, (slide) => {
         const NAVY = "#17344D";
         const GRID = "#C7D6E5";
         const TEXT = "#172538";
@@ -747,13 +783,13 @@ export class PowerPointService {
           }
         });
 
-        // Production P2.1 issue identity header.
+        // Issue identity, user-owned reference fields and visible timestamps.
         const identityTop = 18;
         const identityH = 42;
         const identityW = 292;
 
         const identityBox = addFilledRect(
-          slide, identityX, identityTop, identityW, identityH, "#F8F1F1", "#E4DADA"
+          slide, identityX, identityTop, 118, identityH, "#F8F1F1", "#E4DADA"
         );
         addManagedTag(identityBox, "ISSUE_IDENTITY_BOX");
 
@@ -764,28 +800,51 @@ export class PowerPointService {
         addManagedTag(issueLabel, "ISSUE_ID_LABEL");
 
         const issueValue = addText(
-          slide, issue.id, identityX + 12, identityTop + 16, 105, 20,
+          slide, issue.id, identityX + 12, identityTop + 16, 100, 20,
           { size: 15, bold: true, color: TEXT }
         );
         addManagedTag(issueValue, "ISSUE_ID_VALUE");
 
+        // These value boxes belong to the user: never mark them as managed or
+        // recreate them on refresh. Rebuilding backgrounds must not cover them.
+        const referenceLeft = identityX + 124;
+        const referenceGap = 4;
+        const referenceWidth = (identityW - 124 - referenceGap * 2) / 3;
+        ["SOI", "NOV", "COI/CVI"].forEach((role, index) => {
+          const left = referenceLeft + index * (referenceWidth + referenceGap);
+          const heading = addText(slide, role, left, identityTop, referenceWidth, 14, {
+            size: 7.5, bold: true, color: WHITE,
+          });
+          heading.fill.setSolidColor("#365F91");
+          heading.lineFormat.color = "#17344D";
+          addManagedTag(heading, `REFERENCE_HEADER_${role}`);
+
+          const existing = shapes.some((shape: any) =>
+            readTag(shape.tags.items, TAGS.referenceRole) === role
+          );
+          if (!existing) {
+            const field = addText(slide, "", left, identityTop + 14, referenceWidth, identityH - 14, {
+              size: 9, color: TEXT,
+            });
+            field.fill.setSolidColor(WHITE);
+            field.lineFormat.color = "#17344D";
+            field.lineFormat.weight = 0.7;
+            field.tags.add(TAGS.referenceRole, role);
+          }
+        });
+
         const createdValue = addText(
-          slide,
-          `Created ${new Date(issue.createdAt).toLocaleString()}`,
-          identityX + 124, identityTop + 7, identityW - 136, 12,
-          { size: 7.2, color: TEXT }
+          slide, `Created ${new Date(issue.createdAt).toLocaleString()}`,
+          identityX, identityTop + identityH + 2, identityW / 2, 11,
+          { size: 6.7, color: TEXT }
         );
         addManagedTag(createdValue, "ISSUE_CREATED_VALUE");
-
-        if (issue.updatedAt) {
-          const updatedValue = addText(
-            slide,
-            `Updated ${new Date(issue.updatedAt).toLocaleString()}`,
-            identityX + 124, identityTop + 23, identityW - 136, 12,
-            { size: 7.2, color: TEXT }
-          );
-          addManagedTag(updatedValue, "ISSUE_UPDATED_VALUE");
-        }
+        const updatedValue = addText(
+          slide, issue.updatedAt ? `Updated ${new Date(issue.updatedAt).toLocaleString()}` : "Updated —",
+          identityX + identityW / 2, identityTop + identityH + 2, identityW / 2, 11,
+          { size: 6.7, color: TEXT }
+        );
+        addManagedTag(updatedValue, "ISSUE_UPDATED_VALUE");
 
         // Issue description
         const descHeader = addFilledRect(slide, descX, pageTop, descW, 32, NAVY, NAVY);
@@ -956,6 +1015,18 @@ export class PowerPointService {
         }
 
       });
+      // Office.js has no atomic compare-and-swap. Recheck after staging to
+      // catch changes made while the replacement shapes were being created.
+      try {
+        originalSlide.tags.load("items/key,value");
+        await context.sync();
+        if (readTag(originalSlide.tags.items, TAGS.issueJson) !== baselineJson) {
+          throw new Error(CONFLICT_MESSAGE);
+        }
+      } catch (error) {
+        await rollbackStaged();
+        throw error;
+      }
       // New shapes are confirmed before touching the old layout or stored issue.
       originalSlide.tags.add(TAGS.app, TRUE);
       originalSlide.tags.add(TAGS.schemaVersion, SCHEMA_VERSION);
@@ -1052,7 +1123,7 @@ export class PowerPointService {
           await context.sync();
         });
 
-        await this.renderSelectedIssue(record.issue, record.slideId);
+        await this.renderSelectedIssue(record.issue, record.slideId, record.issue);
         result.updated += 1;
       } catch (error) {
         result.failed += 1;
@@ -1076,10 +1147,11 @@ export class PowerPointService {
     return result;
   }
 
-  async generateSummary(): Promise<{ slidesCreated: number; issueCount: number }> {
+  async generateSummary(): Promise<{ slidesCreated: number; issueCount: number; replacedCount: number }> {
     const records = await this.readAllIssues();
     const issues = records.map((record) => record.issue);
     const pages = groupIssuesForRegister(issues, 14);
+    let replacedCount = 0;
 
     if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8")) {
       throw new Error(
@@ -1098,13 +1170,17 @@ export class PowerPointService {
       await context.sync();
 
       const existingSummaryIds = slides.items
-        .filter((slide: any) => readTag(slide.tags.items, TAGS.summary) === TRUE)
+        .filter((slide: any) => readTag(slide.tags.items, TAGS.summary) === TRUE && readTag(slide.tags.items, TAGS.summaryArchived) !== TRUE)
         .map((slide: any) => slide.id);
 
+      const previousDashboard = slides.items.find((slide: any) =>
+        existingSummaryIds.includes(slide.id) && readTag(slide.tags.items, TAGS.summaryType) === "DASHBOARD"
+      );
+      const previousCounts = readDashboardCounts(previousDashboard && readTag(previousDashboard.tags.items, TAGS.summaryCounts));
       const generatedSlides: any[] = [];
       try {
         const dashboard = await addCleanSummarySlide(context, "DASHBOARD", generatedSlides);
-        buildDashboardSlide(dashboard, issues);
+        buildDashboardSlide(dashboard, issues, previousCounts);
 
         for (let index = 0; index < pages.length; index += 1) {
           const page = pages[index];
@@ -1126,12 +1202,14 @@ export class PowerPointService {
         }
         throw error;
       }
-      // Commit only after all new summary pages were built and moved successfully.
-      existingSummaryIds.forEach((id: string) => slides.getItem(id).delete());
+      replacedCount = existingSummaryIds.length;
+      // Replace the current generated set only after the new set is ready.
+      // Archives created by earlier builds are deliberately excluded.
+      for (const id of existingSummaryIds) slides.getItem(id).delete();
       try {
         await context.sync();
       } catch (error) {
-        throw new Error(`New summaries were created, but removing the old summary failed. Inspect summary pages before retrying. ${String(error)}`);
+        throw new Error(`New summaries were created, but removing previous pages did not finish. Inspect the presentation for duplicate summaries before retrying. ${String(error)}`);
       }
 
     });
@@ -1139,6 +1217,7 @@ export class PowerPointService {
     return {
       slidesCreated: 1 + pages.length,
       issueCount: issues.length,
+      replacedCount,
     };
   }
 
