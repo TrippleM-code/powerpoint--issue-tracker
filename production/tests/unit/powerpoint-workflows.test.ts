@@ -7,7 +7,7 @@ const issue: Issue = { id: "A", areaCode: "L1", roomSpace: "Room", description: 
 
 function host() {
   let sequence = 0;
-  const state = { selected: "A", failShapes: false, failMove: false, afterSync: () => {} };
+  const state = { template: undefined as unknown, selected: "A", failShapes: false, failMove: false, afterSync: () => {} };
   const tags = (initial: Record<string, string> = {}) => ({
     items: Object.entries(initial).map(([key, value]) => ({ key, value })), load() {},
     add(key: string, value: string) { this.items = this.items.filter(t => t.key !== key); this.items.push({ key, value }); },
@@ -20,6 +20,10 @@ function host() {
       const shape: any = { text, ...options, id: `shape-${++sequence}`, name: "", tags: tags(),
         textFrame: { textRange: { font: {} } }, fill: { setSolidColor() {}, setImage() {} }, lineFormat: {},
         delete: vi.fn(() => { const i = shapes.indexOf(shape); if (i >= 0) shapes.splice(i, 1); }),
+        setZOrder: vi.fn((position: string) => {
+          expect(position).toBe("SendToBack");
+          shapes.splice(shapes.indexOf(shape), 1); shapes.unshift(shape);
+        }),
       };
       shapes.push(shape); return shape;
     };
@@ -34,6 +38,7 @@ function host() {
     slides.push(slide); return slide;
   }
   const context = { sync: vi.fn(async () => { state.afterSync(); }), presentation: {
+    pageSetup: {slideWidth:720,slideHeight:540,load() {}},
     getSelectedSlides: () => ({ items: slides.filter(s => s.id === state.selected), load() {} }),
     setSelectedSlides: (ids: string[]) => { state.selected = ids[0]!; },
     slides: { items: slides, load() {}, getItem: (id: string) => {
@@ -42,7 +47,7 @@ function host() {
       add: () => { addSlide(`new-${++sequence}`); },
     },
   } };
-  vi.stubGlobal("Office", { context: { requirements: { isSetSupported: () => true }, document: { settings: { get: () => undefined } } } });
+  vi.stubGlobal("Office", { context: { requirements: { isSetSupported: () => true }, document: { settings: { get: (key: string) => key === "issueflow.template.v1" ? state.template : undefined } } } });
   vi.stubGlobal("PowerPoint", { run: async (fn: any) => fn(context) });
   return { state, slides, addSlide, context };
 }
@@ -212,4 +217,64 @@ describe("PowerPoint service regression boundaries", () => {
     await new PowerPointService().generateSummary();
     expect(h.slides[0].shapes.items.some((s: any) => s.text.includes("First comparison baseline"))).toBe(true);
   });
+});
+
+describe("ICE integration",()=>{
+ const template={format:"ice",title:"Shared ICE title",meetingNumber:"003",meetingDate:"2026-10-14"};
+ it("converts both ways without losing references or manual content",async()=>{
+  const h=host(),a=h.addSlide("A"),service=new PowerPointService();
+  await service.renderSelectedIssue(issue,"A");
+  const refs=a.shapes.items.filter((s:any)=>s.tags.items.some((t:any)=>t.key===TAGS.referenceRole));
+  refs.forEach((s:any,i:number)=>s.text=`REF-${i}`);
+  const manual=a.shapes.addTextBox("Manual",{left:100,top:300,width:100,height:100});
+  h.state.template=template; await service.renderSelectedIssue(issue,"A");
+  expect(a.shapes.items.some((s:any)=>s.text===template.title)).toBe(true);
+  expect(a.shapes.items.some((s:any)=>s.text.includes("L1   |   Room"))).toBe(true);
+  for(const shape of a.shapes.items){expect(shape.left+shape.width).toBeLessThanOrEqual(720.01);expect(shape.top+shape.height).toBeLessThanOrEqual(540.01);}
+  expect(manual.delete).not.toHaveBeenCalled();
+  await service.renderSelectedIssue(issue,"A");
+  expect(a.shapes.items.filter((s:any)=>s.tags.items.some((t:any)=>t.key===TAGS.referenceRole))).toHaveLength(3);
+  for(const shape of a.shapes.items.filter((s:any)=>s.setZOrder.mock.calls.length))expect(a.shapes.items.indexOf(shape)).toBeLessThan(a.shapes.items.indexOf(manual));
+  refs.forEach((s:any,i:number)=>{expect(s.text).toBe(`REF-${i}`);expect(s.delete).not.toHaveBeenCalled();});
+  h.state.template={format:"standard"};await service.renderSelectedIssue(issue,"A");
+  expect(refs[0].left).toBe(776);expect(refs[0].text).toBe("REF-0");
+  expect(a.shapes.items.some((s:any)=>s.text==="ISSUE DESCRIPTION")).toBe(true);
+ });
+ it("shares titles across slides and retains overflow in the register",async()=>{
+  const h=host();h.state.template=template;
+  const many={...issue,actions:Array.from({length:18},(_,i)=>({id:`a${i}`,party:"MEP",required:`Task ${i}`,status:"Open",createdAt:issue.createdAt}))};
+  const a=h.addSlide("A",{[TAGS.issueJson]:JSON.stringify(many)}),b=h.addSlide("B",{[TAGS.issueJson]:JSON.stringify({...issue,id:"B"})});
+  const service=new PowerPointService();expect(await service.applySettingsToAllIssueSlides()).toMatchObject({updated:2,failed:0});
+  for(const s of [a,b])expect(s.shapes.items.some((v:any)=>v.text===template.title)).toBe(true);
+  expect(a.shapes.items.some((s:any)=>s.text.includes("8 more action"))).toBe(true);
+  expect((await service.readAllIssues())[0]!.issue.actions).toHaveLength(18);
+  await service.generateSummary();expect(h.slides.flatMap(s=>s.shapes.items).some(s=>s.text==="Task 17")).toBe(true);
+  const dashboard=h.slides[0]; const label=dashboard.shapes.items.find((s:any)=>s.text==="Total Issues");
+  expect(label.textFrame.topMargin).toBe(0); expect(label.textFrame.bottomMargin).toBe(0);
+  expect(label.textFrame.textRange.font.size).toBeCloseTo(11*720/960);
+  for(const slide of h.slides)for(const shape of slide.shapes.items){expect(shape.left+shape.width).toBeLessThanOrEqual(720.01);expect(shape.top+shape.height).toBeLessThanOrEqual(540.01);}
+ });
+ it("keeps the old layout on failed ICE staging",async()=>{
+  const h=host(),a=h.addSlide("A"),service=new PowerPointService();await service.renderSelectedIssue(issue,"A");
+  const before=[...a.shapes.items];h.state.template=template;h.state.failShapes=true;
+  await expect(service.renderSelectedIssue(issue,"A")).rejects.toThrow(/Injected/);expect(a.shapes.items).toEqual(before);
+ });
+});
+describe("Standard transparent, contiguous layout",()=>{
+ it("preserves manual images across repeated refreshes without opaque body panels or column gutters",async()=>{
+  const h=host(),slide=h.addSlide("A"),service=new PowerPointService();
+  const picture=slide.shapes.addGeometricShape("Rectangle",{left:200,top:180,width:450,height:200});
+  const withAction={...issue,actions:[{id:"a",party:"MEP",required:"Review",status:"Open",createdAt:issue.createdAt}]};
+  await service.renderSelectedIssue(withAction,"A");await service.renderSelectedIssue(withAction,"A");
+  expect(picture.delete).not.toHaveBeenCalled();expect(picture.left).toBe(200);expect(picture.width).toBe(450);
+  expect(picture.setZOrder).not.toHaveBeenCalled();
+  for(const shape of slide.shapes.items.filter((s:any)=>s.setZOrder.mock.calls.length))expect(slide.shapes.items.indexOf(shape)).toBeLessThan(slide.shapes.items.indexOf(picture));
+  const role=(value:string)=>slide.shapes.items.find((s:any)=>s.tags.items.some((t:any)=>t.key===TAGS.managedRole&&t.value===value));
+  for(const value of ["DESC_BODY","LOCATION_BODY","ACTION_0_PARTY_CELL","ACTION_0_REQUIRED_CELL"])expect(role(value).fill.transparency).toBe(1);
+  expect(role("DESC_BODY").left+role("DESC_BODY").width).toBe(role("LOCATION_BODY").left);
+  expect(role("LOCATION_BODY").left+role("LOCATION_BODY").width).toBe(role("REF_HEADER").left);
+  expect(role("REF_HEADER").left+role("REF_HEADER").width).toBe(role("ACTIONS_HEADER").left);
+  expect(role("ACTIONS_HEADER").left+role("ACTIONS_HEADER").width).toBe(952);
+  await service.renderSelectedIssue(issue,"A");expect(role("ACTIONS_EMPTY_BODY").fill.transparency).toBe(1);
+ });
 });

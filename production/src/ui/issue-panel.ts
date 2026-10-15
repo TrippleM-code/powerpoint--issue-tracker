@@ -1,3 +1,4 @@
+import { loadTemplate, saveTemplate } from "../services/template-settings";
 import { issueRevision, CONFLICT_MESSAGE } from "../domain/issue-revision";
 import type { ActionItem, Issue, Party } from "../domain/models";
 import { isDuplicateIssueId, normalizeIssueId, validateIssueDraft } from "../domain/validation";
@@ -1071,6 +1072,7 @@ export async function initializeIssuePanel(): Promise<void> {
   // Attach tab handlers before any PowerPoint reads so navigation remains usable
   // even when a later data request fails.
   initializeTabs();
+  initializeTemplateControls();
   refreshActionChoices();
   renderSettings();
 
@@ -1103,4 +1105,33 @@ export async function initializeIssuePanel(): Promise<void> {
     populate(null);
     showBanner(error instanceof Error ? error.message : String(error), "error");
   }
+}
+
+function initializeTemplateControls(): void {
+  const format=document.getElementById("issueFormat") as HTMLSelectElement;
+  const title=document.getElementById("iceTitle") as HTMLInputElement;
+  const meeting=document.getElementById("iceMeeting") as HTMLInputElement;
+  const date=document.getElementById("iceDate") as HTMLInputElement;
+  const choices=document.getElementById("iceTitleChoices") as HTMLDataListElement;
+  const button=document.getElementById("applyTemplateBtn") as HTMLButtonElement;
+  const refresh=()=>{
+    const saved=loadTemplate(); format.value=saved.format; title.value=saved.title;
+    meeting.value=saved.meetingNumber; date.value=saved.meetingDate;
+    choices.replaceChildren(...saved.titles.map(value=>{const option=document.createElement("option");option.value=value;return option;}));
+  };
+  refresh();
+  button.addEventListener("click",async()=>{
+    if(busy)return;
+    setBusy(true);
+    try {
+      if(format.value === "ice" && !Office.context.requirements.isSetSupported("PowerPointApi","1.10")) throw new Error("ICE needs PowerPoint API 1.10. Update PowerPoint or use Standard.");
+      await saveTemplate({...loadTemplate(),format:format.value === "ice" ? "ice" : "standard",title:title.value,meetingNumber:meeting.value,meetingDate:date.value});
+      refresh();
+    } catch(error) {
+      showBanner(error instanceof Error ? error.message : String(error),"error");
+      setBusy(false); return;
+    }
+    setBusy(false);
+    await applySettingsToAllSlides();
+  });
 }

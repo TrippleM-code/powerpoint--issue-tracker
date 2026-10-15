@@ -4,10 +4,11 @@ import panelHtml from "../../index.html?raw";
 import type { Issue } from "../../src/domain/models";
 
 const mock = vi.hoisted(() => ({
-  readSelectedIssueState: vi.fn(), readAllIssues: vi.fn(), saveSelectedIssue: vi.fn(),
+  applySettingsToAllIssueSlides: vi.fn(), readSelectedIssueState: vi.fn(), readAllIssues: vi.fn(), saveSelectedIssue: vi.fn(),
   renderSelectedIssue: vi.fn(), getSummaryStats: vi.fn(), saveSettings: vi.fn(), loadSettings: vi.fn(),
 }));
 vi.mock("../../src/services/powerpoint-service", () => ({ PowerPointService: class {
+  applySettingsToAllIssueSlides = mock.applySettingsToAllIssueSlides;
   readSelectedIssueState = mock.readSelectedIssueState;
   readAllIssues = mock.readAllIssues;
   saveSelectedIssue = mock.saveSelectedIssue;
@@ -119,4 +120,23 @@ describe("panel regressions", () => {
     await vi.waitFor(() => expect(control("statusBanner").textContent).toMatch(/already exists on Slide 2/));
     expect(mock.saveSelectedIssue).not.toHaveBeenCalled();
   });
+});
+
+describe("template controls",()=>{
+ it("saves a shared title then applies the format once to the deck",async()=>{
+  const data=new Map<string,unknown>();
+  vi.stubGlobal("Office",{AsyncResultStatus:{Succeeded:"ok"},EventType:{DocumentSelectionChanged:"selection"},context:{requirements:{isSetSupported:()=>true},document:{addHandlerAsync:vi.fn(),settings:{get:(k:string)=>data.get(k),set:(k:string,v:unknown)=>data.set(k,v),saveAsync:(cb:any)=>cb({status:"ok"})}}}});
+  mock.applySettingsToAllIssueSlides.mockResolvedValue({updated:2,failed:0,errors:[]});
+  await start();control("issueFormat").value="ice";control("iceTitle").value="My project";
+  click("applyTemplateBtn");await vi.waitFor(()=>expect(mock.applySettingsToAllIssueSlides).toHaveBeenCalledOnce());
+  expect(data.get("issueflow.template.v1")).toMatchObject({format:"ice",title:"My project",titles:["My project"]});
+  expect(document.querySelector("#iceTitleChoices option")?.getAttribute("value")).toBe("My project");
+ });
+ it("blocks unsupported ICE hosts before saving or rebuilding",async()=>{
+  const save=vi.fn();
+  vi.stubGlobal("Office",{EventType:{DocumentSelectionChanged:"selection"},context:{requirements:{isSetSupported:()=>false},document:{addHandlerAsync:vi.fn(),settings:{get:()=>undefined,set:save}}}});
+  await start();control("issueFormat").value="ice";control("iceTitle").value="Project";click("applyTemplateBtn");
+  await vi.waitFor(()=>expect(control("statusBanner").textContent).toContain("1.10"));
+  expect(save).not.toHaveBeenCalled();expect(mock.applySettingsToAllIssueSlides).not.toHaveBeenCalled();
+ });
 });

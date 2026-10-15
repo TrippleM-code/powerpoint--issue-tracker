@@ -1,3 +1,7 @@
+import { containLogo, readLogoSizes } from "../layout/footer-logos";
+import { loadTemplate } from "./template-settings";
+import { renderIceIssue, referenceBoxes } from "../layout/ice-meeting-layout";
+import { readIcePageSize, scaledSummaryTarget } from "./ice-page-size";
 import { issueRevision, CONFLICT_MESSAGE } from "../domain/issue-revision";
 import type { Issue } from "../domain/models";
 import { computeOverallStatus } from "../domain/status";
@@ -175,11 +179,22 @@ function readDashboardCounts(json: string | undefined): number[] | null {
   } catch { return null; }
 }
 
+function dashboardText(
+  slide: any, text: string, left: number, top: number, width: number, height: number,
+  options: {size?: number; bold?: boolean; color?: string} = {},
+): any {
+  const shape = addText(slide,text,left,top,width,height,{...options,size:(options.size ?? 11)*(slide.fontScale ?? 1)});
+  // Default Office textbox margins leave only a few points in short chart labels,
+  // causing AutoSizeTextToFitShape to shrink otherwise readable text drastically.
+  shape.textFrame.leftMargin=0; shape.textFrame.rightMargin=0;
+  shape.textFrame.topMargin=0; shape.textFrame.bottomMargin=0;
+  return shape;
+}
 function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | null): void {
   const addChange = (value: number, index: number, left: number, top: number, width: number) => {
     const change = previous ? value - previous[index]! : null;
     const text = change === null || change === 0 ? "—" : change > 0 ? `+${change}` : `−${Math.abs(change)}`;
-    addText(slide, text, left, top, width, 17, {
+    dashboardText(slide, text, left, top, width, 17, {
       size: 11, bold: true,
       color: change === null || change === 0 ? "#63768B" : change > 0 ? "#237A3B" : "#C62828",
     });
@@ -254,24 +269,24 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
 
   // Header
   addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
-  addText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, {
+  dashboardText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, {
     size: 21,
     bold: true,
     color: "#FFFFFF",
   });
-  addText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
+  dashboardText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
     size: 8,
     color: "#DCE7EF",
   });
 
-  addText(slide, previous ? "Change since previous refresh: + increase / − decrease / — unchanged" : "First comparison baseline: changes appear after the next refresh", 365, 76, 560, 14, {
+  dashboardText(slide, previous ? "Change since previous refresh: + increase / − decrease / — unchanged" : "First comparison baseline: changes appear after the next refresh", 365, 76, 560, 14, {
     size: 8, color: "#63768B",
   });
 
   // ===========================================================================
   // 1) OVERALL TRACKING STATUS
   // ===========================================================================
-  addText(slide, "OVERALL TRACKING STATUS", 34, 72, 300, 20, {
+  dashboardText(slide, "OVERALL TRACKING STATUS", 34, 72, 300, 20, {
     size: 13.5,
     bold: true,
     color: TEXT,
@@ -295,21 +310,21 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
     const accentBar = addFilledRect(slide, left, 98, 5, 48, accent, accent);
     accentBar.lineFormat.transparency = 1.0;
 
-    addText(slide, String(value), left + 14, 105, 40, 20, {
-      size: 16.5,
+    dashboardText(slide, String(value), left + 14, 105, 40, 20, {
+      size: 20,
       bold: true,
       color: TEXT,
     });
 
     addChange(value, index, left + 58, 107, 74);
 
-    addText(slide, label, left + 14, 128, 116, 11, {
-      size: 7.7,
+    dashboardText(slide, label, left + 14, 126, 116, 17, {
+      size: 11,
       color: "#63768B",
     });
   });
 
-  addText(slide, "Issues by overall status", 40, 160, 220, 18, {
+  dashboardText(slide, "Issues by overall status", 40, 160, 220, 18, {
     size: 11.5,
     bold: true,
     color: TEXT,
@@ -326,8 +341,8 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
     const top = 187 + index * 21;
     const barColor = STATUS_COLORS[status] || "#607D8B";
 
-    addText(slide, status, 45, top - 1, 108, 14, {
-      size: 8.4,
+    dashboardText(slide, status, 45, top - 2, 108, 18, {
+      size: 11,
       color: TEXT,
     });
 
@@ -345,8 +360,8 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
       );
     }
 
-    addText(slide, String(count), 730, top - 1, 34, 14, {
-      size: 8.5,
+    dashboardText(slide, String(count), 730, top - 2, 34, 18, {
+      size: 11,
       bold: true,
       color: barColor,
     });
@@ -358,7 +373,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
   // ===========================================================================
   // 2) ACTIONS TRACKING STATUS
   // ===========================================================================
-  addText(slide, "ACTIONS TRACKING STATUS", 34, 318, 300, 20, {
+  dashboardText(slide, "ACTIONS TRACKING STATUS", 34, 318, 300, 20, {
     size: 13.5,
     bold: true,
     color: TEXT,
@@ -379,28 +394,28 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
 
     addFilledRect(slide, left, 344, 270, 44, "#FFFFFF", GRID);
 
-    addText(slide, String(value), left + 14, 351, 46, 18, {
-      size: 15.5,
+    dashboardText(slide, String(value), left + 14, 351, 46, 18, {
+      size: 18,
       bold: true,
       color: TEXT,
     });
 
     addChange(value, index + 6, left + 64, 353, 65);
 
-    addText(slide, label, left + 132, 352, 130, 28, {
-      size: 8.2,
+    dashboardText(slide, label, left + 132, 352, 130, 28, {
+      size: 11,
       color: "#63768B",
     });
   });
 
-  addText(slide, "Current actions by party", 40, 400, 250, 18, {
+  dashboardText(slide, "Current actions by party", 40, 400, 250, 18, {
     size: 11.5,
     bold: true,
     color: TEXT,
   });
 
   if (partyRows.length === 0) {
-    addText(slide, "No current actions.", 44, 430, 300, 20, {
+    dashboardText(slide, "No current actions.", 44, 430, 300, 20, {
       size: 9.5,
       color: "#63768B",
     });
@@ -411,8 +426,8 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
       const top = 427 + index * 15;
       const barColor = PARTY_COLORS[index % PARTY_COLORS.length] ?? "#1E88E5";
 
-      addText(slide, party, 44, top - 1, 165, 12, {
-        size: 7.8,
+      dashboardText(slide, party, 44, top - 2, 165, 15, {
+        size: 11,
         color: TEXT,
       });
 
@@ -428,15 +443,15 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
         barColor
       );
 
-      addText(slide, String(count), 855, top - 1, 32, 12, {
-        size: 7.8,
+      dashboardText(slide, String(count), 855, top - 2, 32, 15, {
+        size: 11,
         bold: true,
         color: barColor,
       });
     });
 
     if (currentActionsByParty.size > partyRows.length) {
-      addText(
+      dashboardText(
         slide,
         `+ ${currentActionsByParty.size - partyRows.length} more party / parties`,
         44,
@@ -707,16 +722,25 @@ export class PowerPointService {
   async renderSelectedIssue(issue: Issue, expectedSlideId: string, expectedIssue?: Issue | null): Promise<void> {
     validateIssue(issue);
     const presentationSettings = loadSettings();
+    const template = loadTemplate();
+    const logoSizes = await readLogoSizes(presentationSettings.parties);
 
     await PowerPoint.run(async (context: any) => {
       const originalSlide = await this.getWriteTarget(context, issue, expectedSlideId, expectedIssue);
       const baselineJson = readTag(originalSlide.tags.items, TAGS.issueJson);
+      const size = template.format === "ice" ? await readIcePageSize(context) : {width:960,height:540};
       const shapes = await loadShapeTags(context, originalSlide);
       const previous = shapes.filter((shape: any) => shape.tags.items.some(
           (tag: any) => tag.key === TAGS.managed && tag.value === TRUE
       ));
 
       const rollbackStaged = await stageShapes(context, originalSlide, (slide) => {
+        if (template.format === "ice") {
+          renderIceIssue(slide, issue, template, presentationSettings.parties, size,
+            new Set(shapes.map((shape: any) => readTag(shape.tags.items, TAGS.referenceRole)).filter((role): role is string => Boolean(role))),
+            {text:addText,rect:addFilledRect,tag:addManagedTag,colors:statusColors},logoSizes);
+          return;
+        }
         const NAVY = "#17344D";
         const GRID = "#C7D6E5";
         const TEXT = "#172538";
@@ -731,16 +755,16 @@ export class PowerPointService {
 
         // Keep every generated shape inside a 16:9 widescreen slide (960 x 540 pt).
         const pageRight = 952;
-        const gap = 8;
+        const gap = 0;
 
         const descX = pageLeft;
-        const descW = 230;
+        const descW = 238;
 
         const stripX = descX + descW + gap;
         const stripW = 36;
 
         const refX = stripX + stripW + gap;
-        const refW = 300;
+        const refW = 308;
 
         const actionsX = refX + refW + gap;
         const actionsW = pageRight - actionsX;
@@ -763,12 +787,12 @@ export class PowerPointService {
           addManagedTag(cell, `PARTY_${index}_CELL`);
 
           if (party.logoDataUrl) {
-            const logoBox = slide.shapes.addGeometricShape("Rectangle", {
+            const logoBox = slide.shapes.addGeometricShape("Rectangle", containLogo(logoSizes[party.id]!, {
               left: cellX + 6,
               top: partyHeaderTop + 5,
               width: Math.max(10, partyCellW - 12),
               height: partyHeaderH - 10,
-            });
+            }));
             logoBox.lineFormat.transparency = 1.0;
             logoBox.fill.setImage(imageDataUrlToBase64(party.logoDataUrl));
             addManagedTag(logoBox, `PARTY_${index}_LOGO`);
@@ -855,6 +879,7 @@ export class PowerPointService {
         addManagedTag(descHeaderText, "DESC_HEADER_TEXT");
 
         const descBody = addFilledRect(slide, descX, bodyTop, descW, bodyH, WHITE, GRID);
+        descBody.fill.transparency = 1;
         addManagedTag(descBody, "DESC_BODY");
         const descText = addText(slide, issue.description, descX + 20, bodyTop + 16, descW - 40, bodyH - 32, {
           size: 10.5, color: TEXT
@@ -863,6 +888,7 @@ export class PowerPointService {
 
         // 50/50 vertical Area / Room strip
         const stripBody = addFilledRect(slide, stripX, bodyTop, stripW, bodyH, WHITE, GRID);
+        stripBody.fill.transparency = 1;
         addManagedTag(stripBody, "LOCATION_BODY");
         const half = bodyH / 2;
         const divider = addThinRect(slide, stripX, bodyTop + half, stripW, 0.8, GRID);
@@ -932,7 +958,8 @@ export class PowerPointService {
 
         if (issue.actions.length === 0) {
           const actBody = addFilledRect(slide, actionsX, bodyTop, actionsW, bodyH, WHITE, GRID);
-          addManagedTag(actBody, "ACTIONS_EMPTY_BODY");
+          actBody.fill.transparency = 1;
+        addManagedTag(actBody, "ACTIONS_EMPTY_BODY");
           const noActions = addText(
             slide,
             "No actions added.",
@@ -953,7 +980,8 @@ export class PowerPointService {
             const rowTop = bodyTop + index * rowH;
 
             const partyCell = addFilledRect(slide, actionsX, rowTop, partyW, rowH, WHITE, GRID);
-            addManagedTag(partyCell, `ACTION_${index}_PARTY_CELL`);
+            partyCell.fill.transparency = 1;
+        addManagedTag(partyCell, `ACTION_${index}_PARTY_CELL`);
             const partyText = addText(
               slide, action.party,
               actionsX + 10, rowTop + 10, partyW - 20, Math.max(24, rowH - 20),
@@ -964,7 +992,8 @@ export class PowerPointService {
             const requiredCell = addFilledRect(
               slide, actionsX + partyW, rowTop, requiredW, rowH, WHITE, GRID
             );
-            addManagedTag(requiredCell, `ACTION_${index}_REQUIRED_CELL`);
+            requiredCell.fill.transparency = 1;
+        addManagedTag(requiredCell, `ACTION_${index}_REQUIRED_CELL`);
             const requiredText = addText(
               slide, action.required,
               actionsX + partyW + 12, rowTop + 10, requiredW - 24, Math.max(24, rowH - 20),
@@ -1026,6 +1055,12 @@ export class PowerPointService {
       } catch (error) {
         await rollbackStaged();
         throw error;
+      }
+      // Reference values stay user-owned; move the same objects when changing format.
+      for (const box of referenceBoxes(template.format === "ice",size)) {
+        for (const shape of shapes.filter((s: any) => readTag(s.tags.items,TAGS.referenceRole) === box.role)) {
+          shape.left=box.left; shape.top=box.top; shape.width=box.width; shape.height=box.height;
+        }
       }
       // New shapes are confirmed before touching the old layout or stored issue.
       originalSlide.tags.add(TAGS.app, TRUE);
@@ -1177,17 +1212,19 @@ export class PowerPointService {
         existingSummaryIds.includes(slide.id) && readTag(slide.tags.items, TAGS.summaryType) === "DASHBOARD"
       );
       const previousCounts = readDashboardCounts(previousDashboard && readTag(previousDashboard.tags.items, TAGS.summaryCounts));
+      const summarySize = loadTemplate().format === "ice" ? await readIcePageSize(context) : null;
+      const summaryTarget = (slide: any) => summarySize ? scaledSummaryTarget(slide,summarySize) : slide;
       const generatedSlides: any[] = [];
       try {
         const dashboard = await addCleanSummarySlide(context, "DASHBOARD", generatedSlides);
-        buildDashboardSlide(dashboard, issues, previousCounts);
+        buildDashboardSlide(summaryTarget(dashboard), issues, previousCounts);
 
         for (let index = 0; index < pages.length; index += 1) {
           const page = pages[index];
           if (!page) continue;
 
           const registerSlide = await addCleanSummarySlide(context, "REGISTER", generatedSlides);
-          buildRegisterSlide(registerSlide, page, index + 1, pages.length);
+          buildRegisterSlide(summaryTarget(registerSlide), page, index + 1, pages.length);
         }
 
         await context.sync();

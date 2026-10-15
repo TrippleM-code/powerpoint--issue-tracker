@@ -14,7 +14,7 @@
         <div class="eyebrow"><img src="/icon-32.png" width="24" height="24" alt="" class="brand-icon" /> IssueFlow</div>
         <h1>PowerPoint Issue Manager</h1>
       </div>
-      <span id="appVersion" class="version">Web · P4.8.1</span>
+      <span id="appVersion" class="version">Web · P4.8.2</span>
     </header>
 
     <nav class="tabs" aria-label="IssueFlow sections">
@@ -84,8 +84,8 @@
         <label for="actionParty">Action By / Responsible Party</label>
         <select id="actionParty"></select>
 
-        <label for="actionRequired">Action Required</label>
-        <textarea id="actionRequired" rows="3" placeholder="Describe the required action"></textarea>
+        <label for="actionRequired">Action Required / Solution</label>
+        <textarea id="actionRequired" rows="3" placeholder="Describe the required action or solution"></textarea>
 
         <label for="actionStatus">Status</label>
         <select id="actionStatus"></select>
@@ -125,6 +125,19 @@
     <section id="tab-settings" class="tab-panel">
       <section class="card">
         <div class="section-title">Settings</div>
+        <div class="settings-group first">
+          <div class="settings-heading">Slide format</div>
+          <label for="issueFormat">Format for this presentation</label>
+          <select id="issueFormat"><option value="standard">Standard (existing)</option><option value="ice">ICE Meeting</option></select>
+          <label for="iceTitle">Project / meeting title</label>
+          <input id="iceTitle" list="iceTitleChoices" maxlength="100" placeholder="Type a title or choose one" />
+          <datalist id="iceTitleChoices"></datalist>
+          <label for="iceMeeting">Meeting number</label><input id="iceMeeting" maxlength="12" placeholder="001" />
+          <label for="iceDate">Meeting date</label><input id="iceDate" type="date" />
+          <p class="hint">Set the title once for all issue slides. Previous titles are saved in this presentation. ICE reads Area Code and Room / Space from each issue; no duplicate entry.</p>
+          <button id="applyTemplateBtn" class="primary">Save Format &amp; Apply to All Issue Slides</button>
+          <p class="hint">Use a presentation copy. Manual drawings are kept; after changing format, reposition them once into the Description column. ICE fits the existing slide size and needs PowerPoint API 1.10. It does not resize the presentation.</p>
+        </div>
 
         <div class="settings-group first">
           <div class="settings-heading">Party Library</div>
@@ -167,7 +180,7 @@
 
         <div class="about-block">
           <strong>IssueFlow for PowerPoint</strong>
-          <span>Web build P4.8.1</span>
+          <span>Web build P4.8.2 · Standard / ICE</span>
         </div>
       </section>
     </section>

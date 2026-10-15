@@ -50,3 +50,5 @@ Only the current P4.8 manifest remains in `production/manifests/`. Superseded de
 Legacy `/p4-2.html` through `/p4-5.html`, `/taskpane.html` and `/v2/taskpane.html` remain available for previously installed manifests. Do not remove these compatibility routes until existing installations have been checked. The working app source, dependencies, build configuration, hosted manifest and runtime files are unchanged by this cleanup. The historical P4.8 release report describes the original release contents before cleanup.
 
 Data stays in presentation tags and Office document settings; no backend, new permission scope, paid API, or AI service was introduced.
+
+Current release: Web P4.8.2, Standard / ICE templates. See production/docs/P4_8_2_RELEASE.md. Existing IT manifest remains valid.
