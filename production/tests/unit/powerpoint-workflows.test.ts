@@ -33,6 +33,8 @@ function host() {
           shapes.splice(shapes.indexOf(shape), 1); shapes.unshift(shape);
         }),
       };
+      shape.textFrame.textRange.load = () => {};
+      Object.defineProperty(shape.textFrame.textRange, "text", {get: () => shape.text});
       shapes.push(shape); return shape;
     };
     const slide: any = { id, tags: tags(initial), shapes: { items: shapes, load() {}, addTextBox: addShape,
@@ -62,6 +64,34 @@ function host() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PowerPoint service regression boundaries", () => {
+  it.each(["standard", "ice"])("includes only populated reference columns and live values in the %s register", async (format) => {
+    const h=host(); h.state.template={format}; const service=new PowerPointService();
+    const many={...issue, actions:Array.from({length:9},(_,i)=>({id:String(i),party:"MEP",required:`Ref task ${i}`,status:"Open",createdAt:issue.createdAt}))};
+    const a=h.addSlide("A",{[TAGS.issueJson]:JSON.stringify(many)});
+    const b=h.addSlide("B",{[TAGS.issueJson]:JSON.stringify({...issue,id:"B"})});
+    const field=(slide:any,role:string,value:string)=>{const s=slide.shapes.addTextBox(value);s.tags.add(TAGS.referenceRole,role);return s;};
+    const soi=field(a,"SOI"," 001234 ");field(a,"NOV"," \n ");const cvi=field(b,"COI/CVI","CVI-02");
+    a.shapes.addTextBox("Private note").tags.add(TAGS.notesRole,"NOTES");
+    await service.generateSummary();
+    let registers=h.slides.filter(s=>s.shapes.items.some((sh:any)=>sh.text==="ACTION REGISTER"));
+    expect(registers).toHaveLength(2);
+    for(const s of registers){
+      const texts=s.shapes.items.map((sh:any)=>sh.text);
+      expect(texts).toContain("SOI");expect(texts).toContain("COI/CVI");expect(texts).not.toContain("NOV");
+      expect(texts).toContain("001234");expect(texts).not.toContain("Private note");
+      for(const sh of s.shapes.items) expect(sh.left+sh.width).toBeLessThanOrEqual(format==="ice"?720.01:960.01);
+    }
+    expect(registers.flatMap(s=>s.shapes.items).filter((sh:any)=>sh.text==="CVI-02")).toHaveLength(1);
+    soi.text="SOI-EDITED"; await service.generateSummary();
+    registers=h.slides.filter(s=>s.shapes.items.some((sh:any)=>sh.text==="ACTION REGISTER"));
+    expect(registers.flatMap(s=>s.shapes.items).some((sh:any)=>sh.text==="001234")).toBe(false);
+    expect(registers.flatMap(s=>s.shapes.items).some((sh:any)=>sh.text==="SOI-EDITED")).toBe(true);
+    expect(soi.delete).not.toHaveBeenCalled();
+    soi.text=""; cvi.text=""; await service.generateSummary();
+    registers=h.slides.filter(s=>s.shapes.items.some((sh:any)=>sh.text==="ACTION REGISTER"));
+    expect(registers).toHaveLength(1);
+    for(const role of ["SOI","NOV","COI/CVI"]) expect(registers[0].shapes.items.some((sh:any)=>sh.text===role)).toBe(false);
+  });
   it.each(["standard", "ice"])("creates one editable notes box and preserves it through %s refreshes", async (format) => {
     const h = host(); h.state.template = { format };
     const slide = h.addSlide("A"), service = new PowerPointService();

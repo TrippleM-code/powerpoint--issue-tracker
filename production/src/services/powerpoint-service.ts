@@ -9,6 +9,7 @@ import { SCHEMA_VERSION, TAGS } from "../storage/tag-names";
 import { loadSettings } from "./settings-service";
 import { parseIssueMetadata, validateIssue } from "../domain/metadata";
 import { stageShapes } from "./staged-render";
+import { readIssueReferences, REFERENCE_ROLES, type ReferenceRole, type IssueReferences } from "./issue-references";
 
 declare const PowerPoint: any;
 declare const Office: any;
@@ -504,7 +505,9 @@ function buildRegisterSlide(
   slide: any,
   groups: RegisterGroup[],
   pageNo: number,
-  pageCount: number
+  pageCount: number,
+  referenceColumns: ReferenceRole[],
+  references: Map<Issue, IssueReferences>,
 ): void {
   const NAVY = "#17344D";
   const GRID = "#D7E1EB";
@@ -527,25 +530,27 @@ function buildRegisterSlide(
   // Ten taller rows allow larger text; overflow continues on the next page.
   const left = 12;
   const top = 58;
-  const headH = 24;
-  const rowH = 43;
+  const headH = 32;
+  const rowH = referenceColumns.length ? 53 : 43;
 
   // Rebalanced widths: keep more space for Description and Action Required.
-  const widths = [82, 92, 194, 104, 324, 128] as const;
+  const n = referenceColumns.length;
+  const widths = n ? [72, 84, 194 - 20*n, 96, 366 - 48*n, 112, ...referenceColumns.map(() => 68)] : [82, 92, 194, 104, 324, 128];
   const headers = [
     "Issue ID",
-    "Area / Room",
+    "Area/Room",
     "Description",
     "Action By",
     "Action Required",
     "Status",
+    ...referenceColumns,
   ];
 
   let x = left;
   headers.forEach((header, index) => {
     const width = widths[index] ?? 0;
     addFilledRect(slide, x, top, width, headH, NAVY, NAVY);
-    summaryText(slide, header, x + 5, top + 5, width - 10, 16, {
+    summaryText(slide, header, x + 5, top + 3, width - 10, 26, {
       size: 11,
       bold: true,
       color: "#FFFFFF"
@@ -553,12 +558,12 @@ function buildRegisterSlide(
     x += width;
   });
 
-  const issueW = widths[0];
-  const areaW = widths[1];
-  const descW = widths[2];
-  const partyW = widths[3];
-  const actionW = widths[4];
-  const statusW = widths[5];
+  const issueW = widths[0]!;
+  const areaW = widths[1]!;
+  const descW = widths[2]!;
+  const partyW = widths[3]!;
+  const actionW = widths[4]!;
+  const statusW = widths[5]!;
 
   let rowIndex = 0;
 
@@ -657,6 +662,13 @@ function buildRegisterSlide(
       );
     });
 
+    let referenceX = colX + partyW + actionW + statusW;
+    for (const role of referenceColumns) {
+      addFilledRect(slide, referenceX, groupTop, 68, groupHeight, baseFill, GRID);
+      const value = references.get(issue)?.[role];
+      if (value) summaryText(slide, value, referenceX + 5, groupTop + 4, 58, groupHeight - 8, {size:11, color:TEXT});
+      referenceX += 68;
+    }
     rowIndex += visible.length;
   });
 }
@@ -1203,7 +1215,7 @@ export class PowerPointService {
   async generateSummary(): Promise<{ slidesCreated: number; issueCount: number; replacedCount: number }> {
     const records = await this.readAllIssues();
     const issues = records.map((record) => record.issue);
-    const pages = groupIssuesForRegister(issues, 10);
+    let pages = groupIssuesForRegister(issues, 10);
     let replacedCount = 0;
 
     if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8")) {
@@ -1232,6 +1244,9 @@ export class PowerPointService {
       const previousCounts = readDashboardCounts(previousDashboard && readTag(previousDashboard.tags.items, TAGS.summaryCounts));
       const summarySize = loadTemplate().format === "ice" ? await readIcePageSize(context) : null;
       const summaryTarget = (slide: any) => summarySize ? scaledSummaryTarget(slide,summarySize) : slide;
+      const references = await readIssueReferences(context, records);
+      const referenceColumns = REFERENCE_ROLES.filter(role => [...references.values()].some(refs => Boolean(refs[role])));
+      pages = groupIssuesForRegister(issues, referenceColumns.length ? 8 : 10);
       const generatedSlides: any[] = [];
       try {
         const dashboard = await addCleanSummarySlide(context, "DASHBOARD", generatedSlides);
@@ -1242,7 +1257,7 @@ export class PowerPointService {
           if (!page) continue;
 
           const registerSlide = await addCleanSummarySlide(context, "REGISTER", generatedSlides);
-          buildRegisterSlide(summaryTarget(registerSlide), page, index + 1, pages.length);
+          buildRegisterSlide(summaryTarget(registerSlide), page, index + 1, pages.length, referenceColumns, references);
         }
 
         await context.sync();
