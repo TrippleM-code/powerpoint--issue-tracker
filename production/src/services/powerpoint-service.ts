@@ -535,7 +535,8 @@ function buildRegisterSlide(
 
   // Rebalanced widths: keep more space for Description and Action Required.
   const n = referenceColumns.length;
-  const widths = n ? [72, 84, 194 - 20*n, 96, 366 - 48*n, 112, ...referenceColumns.map(() => 68)] : [82, 92, 194, 104, 324, 128];
+  const referenceWidth = 52;
+  const widths = n ? [72, 100, 220 - 20*n, 96, 358 - 32*n, 78, ...referenceColumns.map(() => referenceWidth)] : [82, 100, 210, 104, 350, 78];
   const headers = [
     "Issue ID",
     "Area/Room",
@@ -664,10 +665,10 @@ function buildRegisterSlide(
 
     let referenceX = colX + partyW + actionW + statusW;
     for (const role of referenceColumns) {
-      addFilledRect(slide, referenceX, groupTop, 68, groupHeight, baseFill, GRID);
+      addFilledRect(slide, referenceX, groupTop, referenceWidth, groupHeight, baseFill, GRID);
       const value = references.get(issue)?.[role];
-      if (value) summaryText(slide, value, referenceX + 5, groupTop + 4, 58, groupHeight - 8, {size:11, color:TEXT});
-      referenceX += 68;
+      if (value) summaryText(slide, value, referenceX + 5, groupTop + 4, referenceWidth - 10, groupHeight - 8, {size:11, color:TEXT});
+      referenceX += referenceWidth;
     }
     rowIndex += visible.length;
   });

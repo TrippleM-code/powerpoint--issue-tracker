@@ -9,3 +9,5 @@ No new stored issue-schema fields, permissions or endpoints. References are read
 Acceptance: use an ICE test deck with SOI `001234`, blank NOV and COI/CVI `CVI-001`. Generate a summary and verify only SOI and COI/CVI columns appear. Change a number and regenerate; clear all numbers and regenerate to recover the original column layout. Confirm notes remain absent from summaries and all actions survive pagination.
 
 Validation: 129 web tests, build and lint; 109 desktop tests, build/lint and native safeguards. Real PowerPoint ICE test verified live typed reference numbers, omitted blank NOV, notes preservation and summary exclusion through save/reopen.
+
+P4.8.6 / desktop 4.8.0.17: reference columns reduced from 68 to 52 points and Status from 112 to 78 points when references are present. With all three references, Area/Room grows from 84 to 100, Description from 134 to 160 and Action Required from 222 to 262 points. Without references, Status is also narrower and the three text columns gain space. Total table width remains 924 points. Pagination and data behavior are unchanged.
