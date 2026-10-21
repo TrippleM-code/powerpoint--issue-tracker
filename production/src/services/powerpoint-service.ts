@@ -746,6 +746,8 @@ export class PowerPointService {
             { size: 12, color: "#172538" });
           notes.lineFormat.visible = true;
           notes.tags.add(TAGS.notesRole, "NOTES");
+          // Office.js can reject transparency on a newly created textbox's no-fill state.
+          notes.fill.setSolidColor("#FFFFFF");
           notes.fill.transparency = 1;
           notes.lineFormat.color = "#8CA6BD";
           notes.lineFormat.weight = 1;

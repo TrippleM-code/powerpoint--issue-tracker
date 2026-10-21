@@ -18,7 +18,15 @@ function host() {
     const addShape = (text = "", options = {}) => {
       if (state.failShapes) throw new Error("Injected shape failure");
       const shape: any = { text, ...options, id: `shape-${++sequence}`, name: "", tags: tags(),
-        textFrame: { textRange: { font: {} } }, fill: { setSolidColor() {}, setImage() {} }, lineFormat: {},
+        textFrame: { textRange: { font: {} } }, fill: {
+          solid: false, alpha: 0,
+          setSolidColor() { this.solid = true; }, setImage() {},
+          set transparency(value: number) {
+            if (!this.solid) throw new Error("InvalidArgument: fill transparency requires solid fill");
+            this.alpha = value;
+          },
+          get transparency() { return this.alpha; },
+        }, lineFormat: {},
         delete: vi.fn(() => { const i = shapes.indexOf(shape); if (i >= 0) shapes.splice(i, 1); }),
         setZOrder: vi.fn((position: string) => {
           expect(position).toBe("SendToBack");

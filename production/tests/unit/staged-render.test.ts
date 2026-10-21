@@ -3,6 +3,17 @@ import { stageShapes } from "../../src/services/staged-render";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("reports an Office property location after rollback without dumping debug bodies", async () => {
+  const h = host(); const original = [...h.items];
+  const error = Object.assign(new Error("InvalidArgument"), {
+    debugInfo: {errorLocation: "ShapeFill.transparency", fullStatements: "private document text"},
+  });
+  h.context.sync.mockRejectedValueOnce(error);
+  await expect(stageShapes(h.context, h.slide, target => target.shapes.addTextBox("notes")))
+    .rejects.toThrow(/^InvalidArgument \(ShapeFill.transparency\)$/);
+  expect(h.items).toEqual(original);
+});
+
 function host(supported = true) {
   vi.stubGlobal("Office", { context: { requirements: { isSetSupported: () => supported } } });
   const items: any[] = [{ name: "picture" }, { name: "annotation" }];

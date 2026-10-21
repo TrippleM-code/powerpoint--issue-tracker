@@ -38,6 +38,11 @@ export async function stageShapes(
     } catch {
       throw new Error(`Refresh failed; the previous layout was retained, but temporary shapes may remain. ${String(error)}`);
     }
+    // Surface Office's property/method location without dumping document content or request bodies.
+    const location = (error as {debugInfo?: {errorLocation?: unknown}})?.debugInfo?.errorLocation;
+    if (typeof location === "string" && /^[A-Za-z0-9_.() ]{1,120}$/.test(location)) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)} (${location})`);
+    }
     throw error;
   }
 }
