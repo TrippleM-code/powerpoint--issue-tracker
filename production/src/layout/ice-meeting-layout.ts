@@ -46,7 +46,11 @@ export function renderIceIssue(slide: any, issue: Issue, template: TemplateSetti
   const xs=[.01,.079,.455,.831,.917,.996];
   ["S/N","DESCRIPTION","SOLUTION","ACTION BY","STATUS"].forEach((label,i)=>{
     const x=xs[i]!, width=xs[i+1]!-x;
-    rect(x,.106,width,.032); text(label,x+.003,.108,width-.006,.026,8,"#FFFFFF",true);
+    rect(x,.106,width,.032);
+    const heading = text(label,x+.003,.108,width-.006,.026,11,"#FFFFFF",true);
+    // Short header rows must not lose usable height to Office textbox margins.
+    heading.textFrame.leftMargin=0; heading.textFrame.rightMargin=0;
+    heading.textFrame.topMargin=0; heading.textFrame.bottomMargin=0;
     const border=rect(x,.138,width,.792,"#FFFFFF"); border.fill.transparency=1;
   });
   text(issue.id,.013,.147,.063,.045,10,grid,true);

@@ -11,3 +11,5 @@ Acceptance: use an ICE test deck with SOI `001234`, blank NOV and COI/CVI `CVI-0
 Validation: 129 web tests, build and lint; 109 desktop tests, build/lint and native safeguards. Real PowerPoint ICE test verified live typed reference numbers, omitted blank NOV, notes preservation and summary exclusion through save/reopen.
 
 P4.8.6 / desktop 4.8.0.17: reference columns reduced from 68 to 52 points and Status from 112 to 78 points when references are present. With all three references, Area/Room grows from 84 to 100, Description from 134 to 160 and Action Required from 222 to 262 points. Without references, Status is also narrower and the three text columns gain space. Total table width remains 924 points. Pagination and data behavior are unchanged.
+
+P4.8.7 / desktop 4.8.0.18: ICE issue-table headings use consistent 11-point bold text at 960-point slide width, scaled to the presentation width. Zero internal textbox margins avoid excessive shrinkage inside the short header row. Existing column boundaries, images, notes, references and issue content are unchanged. Refresh the issue sheet to update its headings.
