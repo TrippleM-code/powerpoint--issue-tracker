@@ -4,6 +4,7 @@ export const TAGS = {
   issueJson: "ISSUEFLOW_ISSUE_JSON",
   managed: "ISSUEFLOW_MANAGED",
   referenceRole: "ISSUEFLOW_REFERENCE_ROLE",
+  notesRole: "ISSUEFLOW_NOTES_ROLE",
   managedRole: "ISSUEFLOW_MANAGED_ROLE",
   summary: "ISSUEFLOW_SUMMARY",
   summaryArchived: "ISSUEFLOW_SUMMARY_ARCHIVED",

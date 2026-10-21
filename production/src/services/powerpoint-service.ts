@@ -179,7 +179,7 @@ function readDashboardCounts(json: string | undefined): number[] | null {
   } catch { return null; }
 }
 
-function dashboardText(
+function summaryText(
   slide: any, text: string, left: number, top: number, width: number, height: number,
   options: {size?: number; bold?: boolean; color?: string} = {},
 ): any {
@@ -194,7 +194,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
   const addChange = (value: number, index: number, left: number, top: number, width: number) => {
     const change = previous ? value - previous[index]! : null;
     const text = change === null || change === 0 ? "—" : change > 0 ? `+${change}` : `−${Math.abs(change)}`;
-    dashboardText(slide, text, left, top, width, 17, {
+    summaryText(slide, text, left, top, width, 17, {
       size: 11, bold: true,
       color: change === null || change === 0 ? "#63768B" : change > 0 ? "#237A3B" : "#C62828",
     });
@@ -269,24 +269,24 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
 
   // Header
   addFilledRect(slide, 0, 0, 960, 58, NAVY, NAVY);
-  dashboardText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, {
+  summaryText(slide, "ISSUEFLOW DASHBOARD", 34, 15, 420, 24, {
     size: 21,
     bold: true,
     color: "#FFFFFF",
   });
-  dashboardText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
+  summaryText(slide, `Refreshed ${new Date().toLocaleString()}`, 690, 19, 230, 16, {
     size: 8,
     color: "#DCE7EF",
   });
 
-  dashboardText(slide, previous ? "Change since previous refresh: + increase / − decrease / — unchanged" : "First comparison baseline: changes appear after the next refresh", 365, 76, 560, 14, {
+  summaryText(slide, previous ? "Change since previous refresh: + increase / − decrease / — unchanged" : "First comparison baseline: changes appear after the next refresh", 365, 76, 560, 14, {
     size: 8, color: "#63768B",
   });
 
   // ===========================================================================
   // 1) OVERALL TRACKING STATUS
   // ===========================================================================
-  dashboardText(slide, "OVERALL TRACKING STATUS", 34, 72, 300, 20, {
+  summaryText(slide, "OVERALL TRACKING STATUS", 34, 72, 300, 20, {
     size: 13.5,
     bold: true,
     color: TEXT,
@@ -310,7 +310,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
     const accentBar = addFilledRect(slide, left, 98, 5, 48, accent, accent);
     accentBar.lineFormat.transparency = 1.0;
 
-    dashboardText(slide, String(value), left + 14, 105, 40, 20, {
+    summaryText(slide, String(value), left + 14, 105, 40, 20, {
       size: 20,
       bold: true,
       color: TEXT,
@@ -318,13 +318,13 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
 
     addChange(value, index, left + 58, 107, 74);
 
-    dashboardText(slide, label, left + 14, 126, 116, 17, {
+    summaryText(slide, label, left + 14, 126, 116, 17, {
       size: 11,
       color: "#63768B",
     });
   });
 
-  dashboardText(slide, "Issues by overall status", 40, 160, 220, 18, {
+  summaryText(slide, "Issues by overall status", 40, 160, 220, 18, {
     size: 11.5,
     bold: true,
     color: TEXT,
@@ -341,7 +341,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
     const top = 187 + index * 21;
     const barColor = STATUS_COLORS[status] || "#607D8B";
 
-    dashboardText(slide, status, 45, top - 2, 108, 18, {
+    summaryText(slide, status, 45, top - 2, 108, 18, {
       size: 11,
       color: TEXT,
     });
@@ -360,7 +360,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
       );
     }
 
-    dashboardText(slide, String(count), 730, top - 2, 34, 18, {
+    summaryText(slide, String(count), 730, top - 2, 34, 18, {
       size: 11,
       bold: true,
       color: barColor,
@@ -373,7 +373,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
   // ===========================================================================
   // 2) ACTIONS TRACKING STATUS
   // ===========================================================================
-  dashboardText(slide, "ACTIONS TRACKING STATUS", 34, 318, 300, 20, {
+  summaryText(slide, "ACTIONS TRACKING STATUS", 34, 318, 300, 20, {
     size: 13.5,
     bold: true,
     color: TEXT,
@@ -394,7 +394,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
 
     addFilledRect(slide, left, 344, 270, 44, "#FFFFFF", GRID);
 
-    dashboardText(slide, String(value), left + 14, 351, 46, 18, {
+    summaryText(slide, String(value), left + 14, 351, 46, 18, {
       size: 18,
       bold: true,
       color: TEXT,
@@ -402,20 +402,20 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
 
     addChange(value, index + 6, left + 64, 353, 65);
 
-    dashboardText(slide, label, left + 132, 352, 130, 28, {
+    summaryText(slide, label, left + 132, 352, 130, 28, {
       size: 11,
       color: "#63768B",
     });
   });
 
-  dashboardText(slide, "Current actions by party", 40, 400, 250, 18, {
+  summaryText(slide, "Current actions by party", 40, 400, 250, 18, {
     size: 11.5,
     bold: true,
     color: TEXT,
   });
 
   if (partyRows.length === 0) {
-    dashboardText(slide, "No current actions.", 44, 430, 300, 20, {
+    summaryText(slide, "No current actions.", 44, 430, 300, 20, {
       size: 9.5,
       color: "#63768B",
     });
@@ -426,7 +426,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
       const top = 427 + index * 15;
       const barColor = PARTY_COLORS[index % PARTY_COLORS.length] ?? "#1E88E5";
 
-      dashboardText(slide, party, 44, top - 2, 165, 15, {
+      summaryText(slide, party, 44, top - 2, 165, 15, {
         size: 11,
         color: TEXT,
       });
@@ -443,7 +443,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
         barColor
       );
 
-      dashboardText(slide, String(count), 855, top - 2, 32, 15, {
+      summaryText(slide, String(count), 855, top - 2, 32, 15, {
         size: 11,
         bold: true,
         color: barColor,
@@ -451,7 +451,7 @@ function buildDashboardSlide(slide: any, issues: Issue[], previous: number[] | n
     });
 
     if (currentActionsByParty.size > partyRows.length) {
-      dashboardText(
+      summaryText(
         slide,
         `+ ${currentActionsByParty.size - partyRows.length} more party / parties`,
         44,
@@ -513,22 +513,22 @@ function buildRegisterSlide(
   // Compact register header to maximize usable table area.
   const headerH = 46;
   addFilledRect(slide, 0, 0, 960, headerH, NAVY, NAVY);
-  addText(slide, "ACTION REGISTER", 24, 11, 430, 20, {
+  summaryText(slide, "ACTION REGISTER", 24, 11, 430, 20, {
     size: 17,
     bold: true,
     color: "#FFFFFF"
   });
-  addText(slide, `Page ${pageNo} of ${pageCount}`, 812, 14, 116, 14, {
-    size: 7.5,
+  summaryText(slide, `Page ${pageNo} of ${pageCount}`, 812, 14, 116, 14, {
+    size: 10,
     color: "#DCE7EF"
   });
 
   // Compact table geometry.
-  // 14 action rows fit comfortably on a 16:9 slide while remaining readable.
+  // Ten taller rows allow larger text; overflow continues on the next page.
   const left = 12;
   const top = 58;
   const headH = 24;
-  const rowH = 31;
+  const rowH = 43;
 
   // Rebalanced widths: keep more space for Description and Action Required.
   const widths = [82, 92, 194, 104, 324, 128] as const;
@@ -545,8 +545,8 @@ function buildRegisterSlide(
   headers.forEach((header, index) => {
     const width = widths[index] ?? 0;
     addFilledRect(slide, x, top, width, headH, NAVY, NAVY);
-    addText(slide, header, x + 5, top + 5, width - 10, 13, {
-      size: 7,
+    summaryText(slide, header, x + 5, top + 5, width - 10, 16, {
+      size: 11,
       bold: true,
       color: "#FFFFFF"
     });
@@ -582,38 +582,38 @@ function buildRegisterSlide(
     let colX = left;
 
     addFilledRect(slide, colX, groupTop, issueW, groupHeight, baseFill, GRID);
-    addText(
+    summaryText(
       slide,
       issue.id,
       colX + 5,
       groupTop + 4,
       issueW - 10,
       Math.max(16, groupHeight - 8),
-      { size: 7.2, bold: true, color: "#1769AA" }
+      { size: 11, bold: true, color: "#1769AA" }
     );
     colX += issueW;
 
     addFilledRect(slide, colX, groupTop, areaW, groupHeight, baseFill, GRID);
-    addText(
+    summaryText(
       slide,
       [issue.areaCode, issue.roomSpace].filter(Boolean).join("\n") || "—",
       colX + 5,
       groupTop + 4,
       areaW - 10,
       Math.max(16, groupHeight - 8),
-      { size: 6.8, color: TEXT }
+      { size: 11, color: TEXT }
     );
     colX += areaW;
 
     addFilledRect(slide, colX, groupTop, descW, groupHeight, baseFill, GRID);
-    addText(
+    summaryText(
       slide,
       issue.description || "—",
       colX + 5,
       groupTop + 4,
       descW - 10,
       Math.max(16, groupHeight - 8),
-      { size: 6.8, color: TEXT }
+      { size: 11, color: TEXT }
     );
     colX += descW;
 
@@ -621,39 +621,39 @@ function buildRegisterSlide(
       const rowTop = groupTop + localIndex * rowH;
 
       addFilledRect(slide, colX, rowTop, partyW, rowH, "#FFFFFF", GRID);
-      addText(
+      summaryText(
         slide,
         action.party,
         colX + 5,
         rowTop + 4,
         partyW - 10,
         rowH - 8,
-        { size: 6.8, bold: true, color: TEXT }
+        { size: 11, bold: true, color: TEXT }
       );
 
       const actionX = colX + partyW;
       addFilledRect(slide, actionX, rowTop, actionW, rowH, "#FFFFFF", GRID);
-      addText(
+      summaryText(
         slide,
         action.required,
         actionX + 5,
         rowTop + 4,
         actionW - 10,
         rowH - 8,
-        { size: 6.7, color: TEXT }
+        { size: 11, color: TEXT }
       );
 
       const statusX = actionX + actionW;
       const colors = statusColors(action.status);
       addFilledRect(slide, statusX, rowTop, statusW, rowH, colors.fill, GRID);
-      addText(
+      summaryText(
         slide,
         action.status,
         statusX + 5,
         rowTop + 4,
         statusW - 10,
         rowH - 8,
-        { size: 6.8, bold: true, color: colors.text }
+        { size: 11, bold: true, color: colors.text }
       );
     });
 
@@ -735,6 +735,22 @@ export class PowerPointService {
       ));
 
       const rollbackStaged = await stageShapes(context, originalSlide, (slide) => {
+        // User-owned content: create once, never include in managed replacement or summaries.
+        if (!shapes.some((shape: any) => readTag(shape.tags.items, TAGS.notesRole) === "NOTES")) {
+          const ice = template.format === "ice";
+          const notes = addText(slide, "To type Notes",
+            ice ? size.width * 0.095 : 294,
+            ice ? size.height * 0.76 : 430,
+            ice ? size.width * 0.34 : 284,
+            ice ? size.height * 0.14 : 88,
+            { size: 12, color: "#172538" });
+          notes.lineFormat.visible = true;
+          notes.tags.add(TAGS.notesRole, "NOTES");
+          notes.fill.transparency = 1;
+          notes.lineFormat.color = "#8CA6BD";
+          notes.lineFormat.weight = 1;
+          notes.textFrame.verticalAlignment = "Top";
+        }
         if (template.format === "ice") {
           renderIceIssue(slide, issue, template, presentationSettings.parties, size,
             new Set(shapes.map((shape: any) => readTag(shape.tags.items, TAGS.referenceRole)).filter((role): role is string => Boolean(role))),
@@ -1185,7 +1201,7 @@ export class PowerPointService {
   async generateSummary(): Promise<{ slidesCreated: number; issueCount: number; replacedCount: number }> {
     const records = await this.readAllIssues();
     const issues = records.map((record) => record.issue);
-    const pages = groupIssuesForRegister(issues, 14);
+    const pages = groupIssuesForRegister(issues, 10);
     let replacedCount = 0;
 
     if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8")) {

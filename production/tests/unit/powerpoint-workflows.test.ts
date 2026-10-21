@@ -54,6 +54,46 @@ function host() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PowerPoint service regression boundaries", () => {
+  it.each(["standard", "ice"])("creates one editable notes box and preserves it through %s refreshes", async (format) => {
+    const h = host(); h.state.template = { format };
+    const slide = h.addSlide("A"), service = new PowerPointService();
+    const notes = () => slide.shapes.items.filter((s: any) => s.tags.items.some((t: any) => t.key === TAGS.notesRole));
+    await service.renderSelectedIssue(issue, "A");
+    expect(notes()).toHaveLength(1);
+    const note = notes()[0];
+    expect(note.text).toBe("To type Notes");
+    expect(note.lineFormat.weight).toBe(1);
+    expect(note.tags.items.some((t: any) => t.key === TAGS.managed)).toBe(false);
+    note.text = "Private slide-only notes";
+    note.left = 120; note.top = 350; note.width = 210; note.height = 90;
+    note.textFrame.textRange.font.size = 15;
+    await service.renderSelectedIssue(issue, "A");
+    expect((await service.applySettingsToAllIssueSlides()).failed).toBe(0);
+    h.state.template = { format: format === "ice" ? "standard" : "ice" };
+    await service.renderSelectedIssue(issue, "A");
+    expect(notes()).toEqual([note]);
+    expect(note).toMatchObject({text: "Private slide-only notes", left: 120, top: 350, width: 210, height: 90});
+    expect(note.textFrame.textRange.font.size).toBe(15);
+    expect(note.delete).not.toHaveBeenCalled();
+    await service.generateSummary();
+    expect(h.slides.filter(s => s !== slide).flatMap(s => s.shapes.items).some(s => s.text.includes("slide-only notes"))).toBe(false);
+  });
+  it("uses larger register text and continues every action onto taller paginated rows", async () => {
+    const h = host();
+    const many = {...issue, actions: Array.from({length: 21}, (_, i) => ({id: String(i), party: "MEP", required: `Unique action ${i}`, status: "Open", createdAt: issue.createdAt}))};
+    h.addSlide("A", {[TAGS.issueJson]: JSON.stringify(many)});
+    expect((await new PowerPointService().generateSummary()).slidesCreated).toBe(4);
+    const registers = h.slides.filter(s => s.shapes.items.some((v: any) => v.text === "ACTION REGISTER"));
+    expect(registers.map(s => s.shapes.items.filter((v: any) => v.text.startsWith("Unique action")).length)).toEqual([10,10,1]);
+    for (const slide of registers) {
+      for (const shape of slide.shapes.items.filter((s: any) => s.text === "Description" || s.text.startsWith("Unique action"))) {
+        expect(shape.textFrame.textRange.font.size).toBe(11);
+        expect(shape.textFrame.topMargin).toBe(0);
+        expect(shape.textFrame.bottomMargin).toBe(0);
+        expect(shape.top + shape.height).toBeLessThanOrEqual(540);
+      }
+    }
+  });
   it("keeps typed reference boxes through refresh and bulk settings, with no covering shapes", async () => {
     const h = host(); const a = h.addSlide("A");
     const service = new PowerPointService();
