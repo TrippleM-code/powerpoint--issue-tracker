@@ -95,8 +95,9 @@ describe("PowerPoint service regression boundaries", () => {
   it.each(["standard", "ice"])("creates one editable notes box and preserves it through %s refreshes", async (format) => {
     const h = host(); h.state.template = { format };
     const slide = h.addSlide("A"), service = new PowerPointService();
+    const issueWithNotes = {...issue,descriptionNotes:true};
     const notes = () => slide.shapes.items.filter((s: any) => s.tags.items.some((t: any) => t.key === TAGS.notesRole));
-    await service.renderSelectedIssue(issue, "A");
+    await service.renderSelectedIssue(issueWithNotes, "A");
     expect(notes()).toHaveLength(1);
     const note = notes()[0];
     expect(note.text).toBe("To type Notes");
@@ -105,10 +106,10 @@ describe("PowerPoint service regression boundaries", () => {
     note.text = "Private slide-only notes";
     note.left = 120; note.top = 350; note.width = 210; note.height = 90;
     note.textFrame.textRange.font.size = 15;
-    await service.renderSelectedIssue(issue, "A");
+    await service.renderSelectedIssue(issueWithNotes, "A");
     expect((await service.applySettingsToAllIssueSlides()).failed).toBe(0);
     h.state.template = { format: format === "ice" ? "standard" : "ice" };
-    await service.renderSelectedIssue(issue, "A");
+    await service.renderSelectedIssue(issueWithNotes, "A");
     expect(notes()).toEqual([note]);
     expect(note).toMatchObject({text: "Private slide-only notes", left: 120, top: 350, width: 210, height: 90});
     expect(note.textFrame.textRange.font.size).toBe(15);
@@ -235,7 +236,7 @@ describe("PowerPoint service regression boundaries", () => {
     await new PowerPointService().renderSelectedIssue(many, "A");
     expect(manual.delete).not.toHaveBeenCalled(); expect(old.delete).toHaveBeenCalledOnce();
     expect(a.shapes.items.some((s: any) => s.text.includes("8 more action"))).toBe(true);
-    expect(a.shapes.items.filter((s: any) => s.text.startsWith("Task "))).toHaveLength(10);
+    expect(a.shapes.items.filter((s: any) => s.text.startsWith("Task "))).toHaveLength(0);
     const stored = JSON.parse(a.tags.items.find((t: any) => t.key === TAGS.issueJson).value);
     expect(stored.actions).toHaveLength(18);
   });
@@ -348,11 +349,40 @@ describe("Standard transparent, contiguous layout",()=>{
   expect(picture.setZOrder).not.toHaveBeenCalled();
   for(const shape of slide.shapes.items.filter((s:any)=>s.setZOrder.mock.calls.length))expect(slide.shapes.items.indexOf(shape)).toBeLessThan(slide.shapes.items.indexOf(picture));
   const role=(value:string)=>slide.shapes.items.find((s:any)=>s.tags.items.some((t:any)=>t.key===TAGS.managedRole&&t.value===value));
-  for(const value of ["DESC_BODY","LOCATION_BODY","ACTION_0_PARTY_CELL","ACTION_0_REQUIRED_CELL"])expect(role(value).fill.transparency).toBe(1);
+  for(const value of ["DESC_BODY","LOCATION_BODY","ACTION_0_PARTY_CELL","SOLUTION_BODY"])expect(role(value).fill.transparency).toBe(1);
   expect(role("DESC_BODY").left+role("DESC_BODY").width).toBe(role("LOCATION_BODY").left);
   expect(role("LOCATION_BODY").left+role("LOCATION_BODY").width).toBe(role("REF_HEADER").left);
   expect(role("REF_HEADER").left+role("REF_HEADER").width).toBe(role("ACTIONS_HEADER").left);
   expect(role("ACTIONS_HEADER").left+role("ACTIONS_HEADER").width).toBe(952);
-  await service.renderSelectedIssue(issue,"A");expect(role("ACTIONS_EMPTY_BODY").fill.transparency).toBe(1);
+  await service.renderSelectedIssue(issue,"A");expect(role("SOLUTION_BODY").fill.transparency).toBe(1);
+ });
+});
+
+describe("Separate solutions and optional persistent notes",()=>{
+ it.each(["standard","ice"])("keeps actions in summary and notes independent in %s",async(format)=>{
+  const h=host();h.state.template={format};const slide=h.addSlide("A");const service=new PowerPointService();
+  const value={...issue,solution:"Agreed solution",actions:[{id:"a",party:"MEP",required:"Summary task",status:"Closed",createdAt:issue.createdAt}]};
+  const notes=()=>slide.shapes.items.filter((s:any)=>s.tags.items.some((t:any)=>t.key===TAGS.notesRole));
+  await service.renderSelectedIssue(value,"A");expect(notes()).toHaveLength(0);
+  expect(slide.shapes.items.some((s:any)=>s.text==="Summary task")).toBe(false);
+  for(const content of [value.description,value.solution]) expect(slide.shapes.items.find((s:any)=>s.text===content).textFrame.verticalAlignment).toBe("Top");
+  await service.renderSelectedIssue({...value,descriptionNotes:true},"A");expect(notes()).toHaveLength(1);
+  await service.renderSelectedIssue({...value,descriptionNotes:true,solutionNotes:true},"A");expect(notes()).toHaveLength(2);
+  const originals=[...notes()];originals[0].text="Keep typed notes";originals[1].text="Keep solution notes"; originals[1].left=123;
+  await service.renderSelectedIssue(value,"A");expect(notes()).toEqual(originals);expect(notes()[1].left).toBe(123);
+  await service.applySettingsToAllIssueSlides();expect(notes()).toEqual(originals);
+  await service.generateSummary();
+  const summaryShapes=h.slides.filter(s=>s!==slide).flatMap(s=>s.shapes.items);
+  const closed=summaryShapes.find(s=>s.text==="Summary task");expect(closed.textFrame.textRange.font).toMatchObject({color:"#777777",strikethrough:true});
+  expect(summaryShapes.some(s=>s.text.includes("Keep ")||s.text==="Agreed solution")).toBe(false);
+  originals[1].delete();await service.renderSelectedIssue(value,"A");expect(notes()).toEqual([originals[0]]);
+  await service.renderSelectedIssue({...value,solutionNotes:true},"A");expect(notes()).toHaveLength(2);expect(notes()[1].text).toBe("To type Notes");
+  await service.renderSelectedIssue({...value,actions:[{...value.actions[0]!,status:"Open"}]},"A");await service.generateSummary();
+  const reopened=h.slides.filter(s=>s!==slide).flatMap(s=>s.shapes.items).find(s=>s.text==="Summary task");
+  expect(reopened.textFrame.textRange.font.color).not.toBe("#777777");expect(reopened.textFrame.textRange.font.strikethrough).not.toBe(true);
+ });
+ it("detects solution and notes-option conflicts",async()=>{
+  const h=host();h.addSlide("A",{[TAGS.issueJson]:JSON.stringify({...issue,solution:"Someone else's edit"})});
+  await expect(new PowerPointService().renderSelectedIssue({...issue,solution:"My edit"},"A",issue)).rejects.toThrow(/changed since/);
  });
 });

@@ -16,6 +16,9 @@ function date(value: unknown): boolean {
 export function validateIssue(value: unknown): asserts value is Issue {
   if (!object(value) || ![value.id, value.areaCode, value.roomSpace, value.description].every(text)
       || !date(value.createdAt) || (value.updatedAt !== undefined && !date(value.updatedAt))
+      || (value.solution !== undefined && typeof value.solution !== "string")
+      || (value.descriptionNotes !== undefined && typeof value.descriptionNotes !== "boolean")
+      || (value.solutionNotes !== undefined && typeof value.solutionNotes !== "boolean")
       || !Array.isArray(value.actions)) {
     throw new Error("Invalid issue fields, timestamps, or actions list.");
   }

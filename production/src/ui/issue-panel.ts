@@ -20,6 +20,9 @@ type Elements = {
   areaCode: HTMLInputElement;
   roomSpace: HTMLInputElement;
   description: HTMLTextAreaElement;
+  solution: HTMLTextAreaElement;
+  descriptionNotes: HTMLInputElement;
+  solutionNotes: HTMLInputElement;
   save: HTMLButtonElement;
   refresh: HTMLButtonElement;
   banner: HTMLElement;
@@ -72,6 +75,9 @@ function elements(): Elements {
     areaCode: el<HTMLInputElement>("areaCode"),
     roomSpace: el<HTMLInputElement>("roomSpace"),
     description: el<HTMLTextAreaElement>("description"),
+    solution: el<HTMLTextAreaElement>("solution"),
+    descriptionNotes: el<HTMLInputElement>("descriptionNotes"),
+    solutionNotes: el<HTMLInputElement>("solutionNotes"),
     save: el<HTMLButtonElement>("saveIssueBtn"),
     refresh: el<HTMLButtonElement>("refreshSheetBtn"),
     banner: el<HTMLElement>("statusBanner"),
@@ -180,6 +186,9 @@ function populate(issue: Issue | null): void {
   ui.areaCode.value = issue?.areaCode ?? "";
   ui.roomSpace.value = issue?.roomSpace ?? "";
   ui.description.value = issue?.description ?? "";
+  ui.solution.value = issue?.solution ?? "";
+  ui.descriptionNotes.checked = issue?.descriptionNotes ?? false;
+  ui.solutionNotes.checked = issue?.solutionNotes ?? false;
   ui.createdAt.textContent = formatTimestamp(issue?.createdAt);
   ui.updatedAt.textContent = formatTimestamp(issue?.updatedAt);
 
@@ -196,6 +205,9 @@ function buildIssueFromForm(): Issue {
     areaCode: ui.areaCode.value.trim(),
     roomSpace: ui.roomSpace.value.trim(),
     description: ui.description.value.trim(),
+    solution: ui.solution.value.trim(),
+    descriptionNotes: ui.descriptionNotes.checked,
+    solutionNotes: ui.solutionNotes.checked,
   };
 
   const errors = validateIssueDraft(draft);
@@ -212,7 +224,10 @@ function buildIssueFromForm(): Issue {
     currentIssue.id !== draft.id ||
     currentIssue.areaCode !== draft.areaCode ||
     currentIssue.roomSpace !== draft.roomSpace ||
-    currentIssue.description !== draft.description;
+    currentIssue.description !== draft.description ||
+    (currentIssue.solution ?? "") !== draft.solution ||
+    (currentIssue.descriptionNotes ?? false) !== draft.descriptionNotes ||
+    (currentIssue.solutionNotes ?? false) !== draft.solutionNotes;
 
   return {
     ...draft,

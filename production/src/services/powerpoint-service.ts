@@ -639,15 +639,19 @@ function buildRegisterSlide(
 
       const actionX = colX + partyW;
       addFilledRect(slide, actionX, rowTop, actionW, rowH, "#FFFFFF", GRID);
-      summaryText(
+      const closed = action.status.trim().toLowerCase() === "closed";
+      const actionText = summaryText(
         slide,
         action.required,
         actionX + 5,
         rowTop + 4,
         actionW - 10,
         rowH - 8,
-        { size: 11, color: TEXT }
+        { size: 11, color: closed ? "#777777" : TEXT }
       );
+      if (closed && Office.context.requirements.isSetSupported("PowerPointApi","1.8")) {
+        actionText.textFrame.textRange.font.strikethrough = true;
+      }
 
       const statusX = actionX + actionW;
       const colors = statusColors(action.status);
@@ -748,23 +752,18 @@ export class PowerPointService {
       ));
 
       const rollbackStaged = await stageShapes(context, originalSlide, (slide) => {
-        // User-owned content: create once, never include in managed replacement or summaries.
-        if (!shapes.some((shape: any) => readTag(shape.tags.items, TAGS.notesRole) === "NOTES")) {
-          const ice = template.format === "ice";
-          const notes = addText(slide, "To type Notes",
-            ice ? size.width * 0.095 : 294,
-            ice ? size.height * 0.76 : 430,
-            ice ? size.width * 0.34 : 284,
-            ice ? size.height * 0.14 : 88,
-            { size: 12, color: "#172538" });
-          notes.lineFormat.visible = true;
-          notes.tags.add(TAGS.notesRole, "NOTES");
-          // Office.js can reject transparency on a newly created textbox's no-fill state.
-          notes.fill.setSolidColor("#FFFFFF");
-          notes.fill.transparency = 1;
-          notes.lineFormat.color = "#8CA6BD";
-          notes.lineFormat.weight = 1;
-          notes.textFrame.verticalAlignment = "Top";
+        // Notes are user-owned: toggles only create missing boxes, never remove or reset them.
+        const ice = template.format === "ice";
+        for (const spec of [
+          {role:"NOTES", enabled:issue.descriptionNotes, left:ice ? size.width*.095 : 20, width:ice ? size.width*.34 : 214},
+          {role:"SOLUTION_NOTES", enabled:issue.solutionNotes, left:ice ? size.width*.467 : 602, width:ice ? size.width*.34 : 186},
+        ]) {
+          if (!spec.enabled || shapes.some((shape: any) => readTag(shape.tags.items,TAGS.notesRole) === spec.role)) continue;
+          const notes = addText(slide,"To type Notes",spec.left,ice ? size.height*.76 : 430,spec.width,ice ? size.height*.14 : 88,{size:12,color:"#172538"});
+          notes.tags.add(TAGS.notesRole,spec.role);
+          notes.fill.setSolidColor("#FFFFFF"); notes.fill.transparency=1;
+          notes.lineFormat.visible=true; notes.lineFormat.color="#8CA6BD"; notes.lineFormat.weight=1;
+          notes.textFrame.verticalAlignment="Top";
         }
         if (template.format === "ice") {
           renderIceIssue(slide, issue, template, presentationSettings.parties, size,
@@ -912,9 +911,10 @@ export class PowerPointService {
         const descBody = addFilledRect(slide, descX, bodyTop, descW, bodyH, WHITE, GRID);
         descBody.fill.transparency = 1;
         addManagedTag(descBody, "DESC_BODY");
-        const descText = addText(slide, issue.description, descX + 20, bodyTop + 16, descW - 40, bodyH - 32, {
+        const descText = addText(slide, issue.description, descX + 20, bodyTop + 8, descW - 40, 90, {
           size: 10.5, color: TEXT
         });
+        descText.textFrame.verticalAlignment = "Top";
         addManagedTag(descText, "DESC_TEXT");
 
         // 50/50 vertical Area / Room strip
@@ -966,7 +966,7 @@ export class PowerPointService {
         // Actions
         const actHeader = addFilledRect(slide, actionsX, pageTop, actionsW, 32, NAVY, NAVY);
         addManagedTag(actHeader, "ACTIONS_HEADER");
-        const actHeaderText = addText(slide, "ACTIONS", actionsX + 18, pageTop + 7, 120, 18, {
+        const actHeaderText = addText(slide, "SOLUTION", actionsX + 18, pageTop + 7, 120, 18, {
           size: 9.5, bold: true, color: WHITE
         });
         addManagedTag(actHeaderText, "ACTIONS_HEADER_TEXT");
@@ -983,96 +983,28 @@ export class PowerPointService {
         );
         addManagedTag(overallText, "ACTIONS_OVERALL_STATUS");
 
-        const partyW = 78;
-        const statusW = 76;
-        const requiredW = actionsW - partyW - statusW;
-
-        if (issue.actions.length === 0) {
-          const actBody = addFilledRect(slide, actionsX, bodyTop, actionsW, bodyH, WHITE, GRID);
-          actBody.fill.transparency = 1;
-        addManagedTag(actBody, "ACTIONS_EMPTY_BODY");
-          const noActions = addText(
-            slide,
-            "No actions added.",
-            actionsX + 18,
-            bodyTop + 18,
-            actionsW - 36,
-            24,
-            { size: 10, color: "#6A7C90" }
-          );
-          addManagedTag(noActions, "ACTIONS_EMPTY_TEXT");
-        } else {
-          // Keep rows readable. Every action remains in metadata and the full register.
-          const visibleActions = issue.actions.slice(0, 10);
-          const overflow = issue.actions.length - visibleActions.length;
-          const rowH = (bodyH - (overflow ? 32 : 0)) / visibleActions.length;
-
-          visibleActions.forEach((action, index) => {
-            const rowTop = bodyTop + index * rowH;
-
-            const partyCell = addFilledRect(slide, actionsX, rowTop, partyW, rowH, WHITE, GRID);
-            partyCell.fill.transparency = 1;
-        addManagedTag(partyCell, `ACTION_${index}_PARTY_CELL`);
-            const partyText = addText(
-              slide, action.party,
-              actionsX + 10, rowTop + 10, partyW - 20, Math.max(24, rowH - 20),
-              { size: 9.5, bold: true, color: TEXT }
-            );
-            addManagedTag(partyText, `ACTION_${index}_PARTY_TEXT`);
-
-            const requiredCell = addFilledRect(
-              slide, actionsX + partyW, rowTop, requiredW, rowH, WHITE, GRID
-            );
-            requiredCell.fill.transparency = 1;
-        addManagedTag(requiredCell, `ACTION_${index}_REQUIRED_CELL`);
-            const requiredText = addText(
-              slide, action.required,
-              actionsX + partyW + 12, rowTop + 10, requiredW - 24, Math.max(24, rowH - 20),
-              { size: 9.5, color: TEXT }
-            );
-            addManagedTag(requiredText, `ACTION_${index}_REQUIRED_TEXT`);
-
-            let statusFill = "#EEF1F5";
-            let statusTextColor = "#46586B";
-            switch (action.status.trim().toLowerCase()) {
-              case "open":
-                statusFill = "#FDE8E8";
-                statusTextColor = "#9F1D1D";
-                break;
-              case "in progress":
-                statusFill = "#E5F0FB";
-                statusTextColor = "#185A8B";
-                break;
-              case "pending":
-                statusFill = "#FFF2D8";
-                statusTextColor = "#8A5A00";
-                break;
-              case "closed":
-                statusFill = "#E6F5EA";
-                statusTextColor = "#27663A";
-                break;
-            }
-
-            const statusCell = addFilledRect(
-              slide, actionsX + partyW + requiredW, rowTop, statusW, rowH, statusFill, GRID
-            );
-            addManagedTag(statusCell, `ACTION_${index}_STATUS_CELL`);
-            const statusText = addText(
-              slide, action.status,
-              actionsX + partyW + requiredW + 8,
-              rowTop + 10,
-              statusW - 16,
-              Math.max(24, rowH - 20),
-              { size: 9.5, bold: true, color: statusTextColor }
-            );
-            addManagedTag(statusText, `ACTION_${index}_STATUS_TEXT`);
-          });
-          if (overflow) {
-            const note = addText(slide, `+ ${overflow} more action(s). See Actions tab / full Action Register.`,
-              actionsX + 8, pageBottom - 28, actionsW - 16, 24, { size: 8, bold: true });
-            addManagedTag(note, "ACTIONS_OVERFLOW_NOTE");
-          }
+        const solutionW = actionsW - 126;
+        const solutionBody = addFilledRect(slide,actionsX,bodyTop,solutionW,bodyH,WHITE,GRID);
+        solutionBody.fill.transparency=1; addManagedTag(solutionBody,"SOLUTION_BODY");
+        const solutionText = addText(slide,issue.solution || "",actionsX+12,bodyTop+8,solutionW-24,90,{size:10.5,color:TEXT});
+        solutionText.textFrame.verticalAlignment="Top"; addManagedTag(solutionText,"SOLUTION_TEXT");
+        const visibleActions=issue.actions.slice(0,10);
+        const rowH=bodyH/Math.max(visibleActions.length,1);
+        if (issue.actions.length > visibleActions.length) {
+          const overflow = addText(slide,`+ ${issue.actions.length-visibleActions.length} more action(s). See full register.`,actionsX+12,bodyTop+102,solutionW-24,28,{size:8,color:TEXT});
+          addManagedTag(overflow,"ACTIONS_OVERFLOW_NOTE");
         }
+        visibleActions.forEach((action,index)=>{
+          const y=bodyTop+index*rowH, partyX=actionsX+solutionW, colors=statusColors(action.status);
+          const partyCell=addFilledRect(slide,partyX,y,66,rowH,WHITE,GRID);
+          partyCell.fill.transparency=1; addManagedTag(partyCell,`ACTION_${index}_PARTY_CELL`);
+          const party=addText(slide,action.party,partyX+4,y+4,58,rowH-8,{size:9.5,bold:true,color:TEXT});
+          addManagedTag(party,`ACTION_${index}_PARTY_TEXT`);
+          const statusCell=addFilledRect(slide,partyX+66,y,60,rowH,colors.fill,GRID);
+          addManagedTag(statusCell,`ACTION_${index}_STATUS_CELL`);
+          const status=addText(slide,action.status,partyX+70,y+4,52,rowH-8,{size:9.5,bold:true,color:colors.text});
+          addManagedTag(status,`ACTION_${index}_STATUS_TEXT`);
+        });
 
       });
       // Office.js has no atomic compare-and-swap. Recheck after staging to

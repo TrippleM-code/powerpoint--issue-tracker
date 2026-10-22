@@ -14,7 +14,7 @@
         <div class="eyebrow"><img src="/icon-32.png" width="24" height="24" alt="" class="brand-icon" /> IssueFlow</div>
         <h1>PowerPoint Issue Manager</h1>
       </div>
-      <span id="appVersion" class="version">Web · P4.8.7</span>
+      <span id="appVersion" class="version">Web · P4.8.8</span>
     </header>
 
     <nav class="tabs" aria-label="IssueFlow sections">
@@ -42,6 +42,11 @@
         <label for="description">Description</label>
         <textarea id="description" rows="5" placeholder="Describe the coordination issue"></textarea>
 
+        <label for="solution">Solution</label>
+        <textarea id="solution" rows="5" placeholder="Describe the agreed solution (optional)"></textarea>
+        <label class="notes-option"><input type="checkbox" id="descriptionNotes" /> Add notes box under Description</label>
+        <label class="notes-option"><input type="checkbox" id="solutionNotes" /> Add notes box under Solution</label>
+        <p class="hint">Tick, then Create / Refresh Sheet to add a box. Existing boxes stay when unticked; delete them directly in PowerPoint. Notes stay on the issue slide only.</p>
         <div class="button-stack">
           <button id="saveIssueBtn" class="secondary">Save Issue Data</button>
           <button id="refreshSheetBtn" class="primary">Create / Refresh Sheet</button>
@@ -84,8 +89,8 @@
         <label for="actionParty">Action By / Responsible Party</label>
         <select id="actionParty"></select>
 
-        <label for="actionRequired">Action Required / Solution</label>
-        <textarea id="actionRequired" rows="3" placeholder="Describe the required action or solution"></textarea>
+        <label for="actionRequired">Action Required</label>
+        <textarea id="actionRequired" rows="3" placeholder="Describe the required action for the summary register"></textarea>
 
         <label for="actionStatus">Status</label>
         <select id="actionStatus"></select>
@@ -180,7 +185,7 @@
 
         <div class="about-block">
           <strong>IssueFlow for PowerPoint</strong>
-          <span>Web build P4.8.7 · Standard / ICE</span>
+          <span>Web build P4.8.8 · Standard / ICE</span>
         </div>
       </section>
     </section>

@@ -6,6 +6,7 @@ export const CONFLICT_MESSAGE = "This issue changed since it was loaded. Your dr
 export function issueRevision(issue: Issue | null): string {
   if (!issue) return "null";
   return JSON.stringify([issue.id, issue.areaCode, issue.roomSpace, issue.description,
+    issue.solution ?? "", issue.descriptionNotes ?? false, issue.solutionNotes ?? false,
     issue.createdAt, issue.updatedAt ?? null,
     issue.actions.map(a => [a.id, a.party, a.required, a.status, a.createdAt, a.updatedAt ?? null])]);
 }

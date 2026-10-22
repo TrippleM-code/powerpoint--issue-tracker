@@ -12,6 +12,9 @@ export interface Issue {
   areaCode: string;
   roomSpace: string;
   description: string;
+  solution?: string;
+  descriptionNotes?: boolean;
+  solutionNotes?: boolean;
   createdAt: string;
   updatedAt?: string;
   actions: ActionItem[];

@@ -54,20 +54,23 @@ export function renderIceIssue(slide: any, issue: Issue, template: TemplateSetti
     const border=rect(x,.138,width,.792,"#FFFFFF"); border.fill.transparency=1;
   });
   text(issue.id,.013,.147,.063,.045,10,grid,true);
-  text(issue.description,.091,.15,.35,.22,11);
+  const description = text(issue.description,.091,.15,.35,.18,11);
+  description.textFrame.verticalAlignment = "Top";
+  const solution = text(issue.solution || "",.467,.15,.352,.18,11);
+  solution.textFrame.verticalAlignment = "Top";
   // Description below 37% is reserved for manual reference images/annotations.
   const visible=issue.actions.slice(0,10), overflow=issue.actions.length-visible.length;
   const rowHeight=(.792-(overflow?.05:0))/Math.max(visible.length,1);
-  if (!visible.length) text("No actions added.",.467,.15,.35,.04);
+
   visible.forEach((action,i)=>{
     const y=.138+i*rowHeight, colors=draw.colors(action.status);
-    if(i) rect(.455,y,.541,.001,"#C7D6E5");
-    text(action.required,.467,y+.01,.352,rowHeight-.02,10);
+    if(i) rect(.831,y,.165,.001,"#C7D6E5");
+
     text(action.party,.835,y+.01,.078,rowHeight-.02,9,grid,true);
     rect(.917,y,.079,rowHeight,colors.fill);
     text(action.status,.92,y+.01,.073,rowHeight-.02,9,colors.text,true);
   });
-  if(overflow) text(`+ ${overflow} more action(s). See Actions tab / full Action Register.`,.467,.885,.52,.038,8,grid,true);
+  if(overflow) text(`+ ${overflow} more action(s). See Actions tab / full Action Register.`,.467,.34,.352,.045,8,grid,true);
   text(`Created ${new Date(issue.createdAt).toLocaleString()}\nUpdated ${issue.updatedAt ? new Date(issue.updatedAt).toLocaleString() : "—"}`,.01,.94,.42,.047,7);
   footerLogoBoxes(parties,logoSizes,W,H).forEach(box=>{
     if(box.party.logoDataUrl){

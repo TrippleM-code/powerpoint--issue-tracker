@@ -140,3 +140,10 @@ describe("template controls",()=>{
   expect(save).not.toHaveBeenCalled();expect(mock.applySettingsToAllIssueSlides).not.toHaveBeenCalled();
  });
 });
+it("loads and saves separate solution and notes choices",async()=>{
+ await start({...base,solution:"Existing solution",solutionNotes:true});
+ expect(control("solution").value).toBe("Existing solution");expect(control("solutionNotes").checked).toBe(true);expect(control("descriptionNotes").checked).toBe(false);
+ control("solution").value="Revised solution";control("descriptionNotes").checked=true;control("solutionNotes").checked=false;click("refreshSheetBtn");
+ await vi.waitFor(()=>expect(mock.renderSelectedIssue).toHaveBeenCalled());
+ expect(mock.renderSelectedIssue.mock.calls[0]![0]).toMatchObject({solution:"Revised solution",descriptionNotes:true,solutionNotes:false,actions:base.actions});
+});
